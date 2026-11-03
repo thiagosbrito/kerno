@@ -12,14 +12,13 @@ Requires Node 24.16.x (`.nvmrc`) and pnpm 11.22.x (`packageManager`; use Corepac
 
 ```sh
 pnpm install --frozen-lockfile
-cp .env.example apps/admin/.env.local        # names only; fill in local values
-cp .env.example apps/storefront/.env.local
+pnpm setup:env  # writes apps/*/.env.local with placeholder values (never overwrites)
 pnpm dev        # admin on :3000, storefront on :3001
 ```
 
 Checks: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm test:bundles` (builds with sentinel secrets and fails if server-only names/values reach client bundles), `pnpm test:e2e` (Playwright on ports 3100/3101; run `pnpm exec playwright install chromium` once), `pnpm docs:check`, `git diff --check`.
 
-Apps fail closed on malformed environment configuration (Zod, `packages/contracts`). The Supabase CLI and local database are not set up yet.
+`.env.example` lists names only; `pnpm setup:env` fills non-secret placeholders for local use, and real Supabase values replace them once a local database exists. Apps fail closed on missing or malformed environment configuration (an `EnvError` page means `.env.local` is absent or invalid). The Supabase CLI and local database are not set up yet.
 
 - [Agent entry point](AGENTS.md)
 - [Roadmap and Linear tickets](docs/roadmap.md)
