@@ -16,6 +16,10 @@ Approved: platform-hosted shared Next.js/Supabase multi-tenancy; RLS plus server
 - Hosting, SLOs, RPO/RTO, performance budgets and incident ownership: operations/readiness tickets.
 - Unavailable blueprint details: reconcile when supplied; record any conflicts before implementation.
 
+## Records
+
+- [0001 · Temporary pnpm release-age exemptions](0001-temporary-release-age-exemptions.md) — accepted, expires 2026-11-04T18:02Z.
+
 ## Recording a new decision
 
 Create a numbered Markdown record with status (proposed/accepted/superseded), date, owner/approval evidence, related issue, context, alternatives, decision, consequences and verification/rollback implications. Do not label a proposal accepted without evidence. Routine naming choices do not need an ADR.
