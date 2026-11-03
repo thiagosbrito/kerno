@@ -40,6 +40,7 @@ Security baseline: [threat model](security/threat-model.md) and [ASVS evidence m
 | [THI-72](https://linear.app/thiagosbrito/issue/THI-72/define-versioned-page-schemas-theme-tokens-and-block-registry) | Define versioned page schemas, theme tokens and block registry | High | THI-71 |
 | [THI-73](https://linear.app/thiagosbrito/issue/THI-73/build-accessible-visual-editor-with-draft-persistence) | Build accessible visual editor with draft persistence | Medium | THI-72 |
 | [THI-74](https://linear.app/thiagosbrito/issue/THI-74/implement-isolated-previews-atomic-publishing-and-rollback) | Implement isolated previews, atomic publishing and rollback | High | THI-73 |
+| [THI-88](https://linear.app/thiagosbrito/issue/THI-88/import-asvs-50-l2-requirements-into-per-requirement-evidence-table) | Import ASVS 5.0 L2 requirements into per-requirement evidence table | High | None |
 
 ## M4 · Commerce, Shipping & Rules
 
@@ -64,7 +65,7 @@ Security baseline: [threat model](security/threat-model.md) and [ASVS evidence m
 
 | Ticket | Scope | Priority | Blocked by |
 | --- | --- | --- | --- |
-| [THI-84](https://linear.app/thiagosbrito/issue/THI-84/complete-asvs-l2-verification-and-remediate-findings) | Complete ASVS L2 verification and remediate findings | High | THI-82, THI-83, THI-62, THI-63 |
+| [THI-84](https://linear.app/thiagosbrito/issue/THI-84/complete-asvs-l2-verification-and-remediate-findings) | Complete ASVS L2 verification and remediate findings | High | THI-82, THI-83, THI-62, THI-63, THI-88 |
 | [THI-85](https://linear.app/thiagosbrito/issue/THI-85/validate-brazilpoland-privacy-and-commerce-readiness) | Validate Brazil/Poland privacy and commerce readiness | High | THI-79, THI-76, THI-83 |
 | [THI-86](https://linear.app/thiagosbrito/issue/THI-86/establish-deployment-telemetry-backup-and-recovery) | Establish deployment, telemetry, backup and recovery | High | THI-81, THI-83, THI-62 |
 | [THI-87](https://linear.app/thiagosbrito/issue/THI-87/validate-performance-accessibility-and-release-beta-gates) | Validate performance, accessibility and release beta gates | High | THI-84, THI-85, THI-86 |
