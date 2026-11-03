@@ -4,7 +4,7 @@ Multi-tenant, customizable e-commerce SaaS for merchants in Brazil and Poland. M
 
 ## Repository status
 
-Bootstrapped pnpm/Turborepo workspace: `apps/admin`, `apps/storefront`, `packages/contracts`, `packages/server`, `packages/ui`, `supabase` (migrations and RLS tests; see [tenancy and RLS](docs/security/tenancy-and-rls.md)). There is a tenant/membership schema but no authentication or deployment yet (see the [roadmap](docs/roadmap.md)). `packages/domain` is created by the ticket that needs it.
+Bootstrapped pnpm/Turborepo workspace: `apps/admin`, `apps/storefront`, `packages/contracts`, `packages/server`, `packages/ui`, `supabase` (migrations and RLS tests; see [tenancy and RLS](docs/security/tenancy-and-rls.md)). There is a tenant/membership schema and verified hostname-to-store routing for the storefront ([host routing](docs/security/host-routing.md)), but no authentication or deployment yet (see the [roadmap](docs/roadmap.md)). `packages/domain` is created by the ticket that needs it.
 
 ## Local development
 

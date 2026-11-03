@@ -8,3 +8,4 @@ export function getServerEnv(): ServerEnv {
   cached ??= parseServerEnv(process.env);
   return cached;
 }
+export * from "./tenancy";

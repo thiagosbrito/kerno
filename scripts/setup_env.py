@@ -15,5 +15,6 @@ for app in ("admin", "storefront"):
     if target.exists():
         print(f"kept existing {target.relative_to(root)}")
         continue
-    target.write_text("".join(f"{k}={v}\n" for k, v in values.items()))
+    extra = {"PLATFORM_DOMAIN": "localhost"} if app == "storefront" else {}
+    target.write_text("".join(f"{k}={v}\n" for k, v in {**values, **extra}.items()))
     print(f"created {target.relative_to(root)}")

@@ -1,3 +1,7 @@
+# storefront scope
+
+Every request is gated by `src/proxy.ts` (host → active store, else 404/503) and pages re-resolve the store with `getStoreRouter()`; do not read the tenant from anywhere else. Pages that depend on the host must stay dynamic. See [host routing](../../docs/security/host-routing.md).
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 ## This is NOT the Next.js you know

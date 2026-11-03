@@ -47,7 +47,7 @@ Managers handle day-to-day operations (catalog, stock, orders) but not store con
 
 ## `SECURITY DEFINER` inventory
 
-`private.is_org_member`, `private.has_org_role`, `private.store_is_active` (policy helpers; avoid RLS recursion; read only the caller's own membership or public activity), and `private.protect_last_owner` (needs to see all owners). `public.create_organization` and `public.add_member` are `SECURITY INVOKER` and service-role-only (`add_member` locks the acting user's membership row with `FOR SHARE`). All definer functions set `search_path = ''`; the test suite pins this exact list.
+`private.is_org_member`, `private.has_org_role`, `private.store_is_active` (policy helpers; avoid RLS recursion; read only the caller's own membership or public activity), and `private.protect_last_owner` (needs to see all owners). `public.create_organization` and `public.add_member` are `SECURITY INVOKER` and service-role-only (`add_member` locks the acting user's membership row with `FOR SHARE`). `public.resolve_store_by_host` and `public.resolve_store_by_slug` (THI-65, [host routing](host-routing.md)) are definer functions callable by `anon`: the only public window onto `store_domains` and `stores`, returning id, slug and primary host of active stores. `claim_domain`, `confirm_domain` and `release_domain` are `SECURITY INVOKER` and service-role-only. All definer functions set `search_path = ''`; the test suite pins this exact list.
 
 ## Verification
 
@@ -62,4 +62,6 @@ Limitations: the real-stack run uses direct SQL with `SET ROLE` and JWT claims, 
 
 ## Rollback
 
-The migration is forward-only. `supabase/rollbacks/20261103210000_tenancy_core.down.sql` drops everything it created and **destroys tenant data**; use it only before real tenants exist. Afterwards, roll forward with a new migration (expand, migrate, contract).
+The migrations are forward-only. Roll back newest first: `supabase/rollbacks/20261104090000_store_domains.down.sql` before the tenancy one.
+
+The tenancy migration is forward-only. `supabase/rollbacks/20261103210000_tenancy_core.down.sql` drops everything it created and **destroys tenant data**; use it only before real tenants exist. Afterwards, roll forward with a new migration (expand, migrate, contract).

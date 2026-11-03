@@ -6,7 +6,12 @@ import pg from "pg";
 
 const here = dirname(fileURLToPath(import.meta.url));
 export const migrationsDir = join(here, "..", "migrations");
-export const rollbackFile = join(here, "..", "rollbacks", "20261103210000_tenancy_core.down.sql");
+export const rollbacksDir = join(here, "..", "rollbacks");
+
+/** Manual undo scripts, newest first (a later migration may depend on an earlier one). */
+export function rollbackFiles(): string[] {
+  return readdirSync(rollbacksDir).filter((f) => f.endsWith(".sql")).sort().reverse();
+}
 
 /**
  * Stand-in for what Supabase provides before user migrations run: API roles,

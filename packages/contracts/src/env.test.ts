@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EnvError, parsePublicEnv, parseServerEnv } from "./env";
+import { EnvError, parseHostRoutingEnv, parsePublicEnv, parseServerEnv } from "./env";
 
 const valid = {
   NEXT_PUBLIC_ADMIN_URL: "http://localhost:3000",
@@ -40,6 +40,24 @@ describe("env contracts", () => {
       expect.unreachable();
     } catch (e) {
       expect((e as Error).message).not.toContain("bad-secret-value");
+    }
+  });
+});
+
+describe("host routing env", () => {
+  it("accepts a platform domain and an optional trusted header", () => {
+    expect(parseHostRoutingEnv({ PLATFORM_DOMAIN: "localhost" })).toEqual({ PLATFORM_DOMAIN: "localhost" });
+    expect(parseHostRoutingEnv({ PLATFORM_DOMAIN: "kerno.app", TRUSTED_FORWARDED_HOST_HEADER: "x-forwarded-host" }).TRUSTED_FORWARDED_HOST_HEADER).toBe("x-forwarded-host");
+    // An empty value in an env file means "not configured", not "trust the empty header".
+    expect(parseHostRoutingEnv({ PLATFORM_DOMAIN: "kerno.app", TRUSTED_FORWARDED_HOST_HEADER: "" }).TRUSTED_FORWARDED_HOST_HEADER).toBeUndefined();
+  });
+
+  it("rejects malformed platform domains and header names", () => {
+    for (const bad of [undefined, "", "KERNO.APP", "kerno.app.", "kerno.app:3000", "http://kerno.app", "a b.test", ".kerno.app", "-x.test"]) {
+      expect(() => parseHostRoutingEnv({ PLATFORM_DOMAIN: bad }), String(bad)).toThrow(EnvError);
+    }
+    for (const bad of ["host", "forwarded", "X-Forwarded-Host", "x-forwarded host", "x-"]) {
+      expect(() => parseHostRoutingEnv({ PLATFORM_DOMAIN: "kerno.app", TRUSTED_FORWARDED_HOST_HEADER: bad }), bad).toThrow(EnvError);
     }
   });
 });
