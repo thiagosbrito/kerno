@@ -10,6 +10,8 @@
 alter default privileges in schema public revoke all on tables from anon, authenticated;
 alter default privileges in schema public revoke all on sequences from anon, authenticated;
 alter default privileges in schema public revoke all on functions from anon, authenticated;
+-- PostgreSQL grants EXECUTE on new functions to PUBLIC; a per-schema revoke cannot remove that.
+alter default privileges revoke execute on functions from public;
 
 create schema if not exists private;
 revoke all on schema private from public;
@@ -117,22 +119,6 @@ create trigger stores_touch_updated_at before update on public.stores
 create trigger store_public_profiles_touch_updated_at before update on public.store_public_profiles
   for each row execute function private.touch_updated_at();
 
--- created_by cannot be forged by an API caller.
-create function private.stamp_membership_creator() returns trigger
-language plpgsql set search_path = ''
-as $$
-declare
-  uid uuid := (select auth.uid());
-begin
-  if uid is not null then
-    new.created_by := uid;
-  end if;
-  return new;
-end;
-$$;
-create trigger memberships_stamp_creator before insert on public.memberships
-  for each row execute function private.stamp_membership_creator();
-
 -- An organization always keeps at least one owner. Locking the organization row
 -- serializes concurrent demotions/removals so two owners cannot both pass the check.
 -- SECURITY DEFINER: must see the organization and all owners regardless of caller RLS.
@@ -143,7 +129,9 @@ begin
   if old.role <> 'owner' then
     return coalesce(new, old);
   end if;
-  if tg_op = 'UPDATE' and new.role = 'owner' then
+  -- Staying an owner of the same organization is fine; changing the key counts as removal.
+  if tg_op = 'UPDATE' and new.role = 'owner'
+     and new.organization_id = old.organization_id and new.user_id = old.user_id then
     return new;
   end if;
   -- Organization already gone (cascade from organization delete): allow.
@@ -163,29 +151,41 @@ $$;
 create trigger memberships_protect_last_owner before update or delete on public.memberships
   for each row execute function private.protect_last_owner();
 
--- Only the platform (service role / migrations: no end-user subject) may suspend a store
--- or lift a suspension, so a merchant cannot undo an abuse takedown.
+-- Only the platform (service role, migrations, owner-run jobs) may suspend a store. For API
+-- roles (anon, authenticated) a suspended row is frozen: no status change, edit, rename or
+-- delete, and an organization delete that would cascade to it fails. Otherwise a merchant
+-- could rename the slug and recreate the store, or delete the evidence. Judged by the invoking
+-- role (SECURITY INVOKER) plus any active end-user session (auth.uid()). Limit: a merchant can still create a different
+-- store in the same organization; organization-level suspension is open (AC-36).
 create function private.guard_store_suspension() returns trigger
 language plpgsql set search_path = ''
 as $$
 begin
-  if (select auth.uid()) is not null and (
-    (tg_op = 'INSERT' and new.status = 'suspended') or
-    (tg_op = 'UPDATE' and new.status is distinct from old.status
-      and (new.status = 'suspended' or old.status = 'suspended'))
-  ) then
+  -- API caller = invoking role is anon/authenticated, OR an end-user session is active. The
+  -- second check matters because foreign-key cascades (organization delete) run as the table
+  -- owner, where current_user alone would look like the platform.
+  if current_user not in ('anon', 'authenticated') and (select auth.uid()) is null then
+    return coalesce(new, old);
+  end if;
+  if tg_op = 'INSERT' and new.status = 'suspended' then
     raise exception 'store suspension is controlled by the platform' using errcode = '42501';
   end if;
-  return new;
+  if tg_op in ('UPDATE', 'DELETE') and old.status = 'suspended' then
+    raise exception 'a suspended store is controlled by the platform' using errcode = '42501';
+  end if;
+  if tg_op = 'UPDATE' and new.status = 'suspended' then
+    raise exception 'store suspension is controlled by the platform' using errcode = '42501';
+  end if;
+  return coalesce(new, old);
 end;
 $$;
-create trigger stores_guard_suspension before insert or update on public.stores
+create trigger stores_guard_suspension before insert or update or delete on public.stores
   for each row execute function private.guard_store_suspension();
 
 -- Trigger functions are never called directly. EXECUTE is only checked when a trigger is
 -- created, so removing the default PUBLIC grant does not affect firing.
-revoke all on function private.touch_updated_at(), private.stamp_membership_creator(),
-  private.protect_last_owner(), private.guard_store_suspension() from public;
+revoke all on function private.touch_updated_at(), private.protect_last_owner(),
+  private.guard_store_suspension() from public;
 
 -- ---------------------------------------------------------------------------
 -- Organization creation: the only way to bootstrap a tenant, and server-only. Shoppers are
@@ -208,6 +208,30 @@ $$;
 revoke all on function public.create_organization(text, uuid) from public, anon, authenticated;
 grant execute on function public.create_organization(text, uuid) to service_role;
 
+-- Adding a member is server-only too. A direct INSERT would let any owner or admin attach any
+-- existing auth user (including a shopper) to their organization without consent, and then
+-- promote them. The trusted server calls this after the invitee accepts (THI-68), passing the
+-- acting user; the same role rules as before are enforced here: owners add any role, admins
+-- add managers and staff. SECURITY INVOKER: runs with service_role's own privileges.
+create function public.add_member(org uuid, member_user_id uuid, member_role public.org_role, actor uuid)
+returns void
+language plpgsql set search_path = ''
+as $$
+begin
+  if not exists (
+    select 1 from public.memberships m
+    where m.organization_id = org and m.user_id = actor
+      and (m.role = 'owner' or (m.role = 'admin' and member_role in ('manager', 'staff')))
+  ) then
+    raise exception 'actor may not add this role' using errcode = '42501';
+  end if;
+  insert into public.memberships (organization_id, user_id, role, created_by)
+    values (org, member_user_id, member_role, actor);
+end;
+$$;
+revoke all on function public.add_member(uuid, uuid, public.org_role, uuid) from public, anon, authenticated;
+grant execute on function public.add_member(uuid, uuid, public.org_role, uuid) to service_role;
+
 -- ---------------------------------------------------------------------------
 -- Row level security: enabled everywhere, policies enumerated per role/action.
 -- ---------------------------------------------------------------------------
@@ -226,13 +250,9 @@ create policy organizations_delete on public.organizations for delete to authent
   using (private.has_org_role(id, array['owner']::public.org_role[]));
 
 -- memberships: owner manages all; admin manages managers and staff; any member may leave.
+-- No API insert: members are added through public.add_member (server-only).
 create policy memberships_select on public.memberships for select to authenticated
   using (private.is_org_member(organization_id));
-create policy memberships_insert on public.memberships for insert to authenticated
-  with check (
-    private.has_org_role(organization_id, array['owner']::public.org_role[])
-    or (private.has_org_role(organization_id, array['admin']::public.org_role[]) and role in ('manager', 'staff'))
-  );
 create policy memberships_update on public.memberships for update to authenticated
   using (
     private.has_org_role(organization_id, array['owner']::public.org_role[])
@@ -265,25 +285,25 @@ create policy stores_delete on public.stores for delete to authenticated
 create policy profiles_public_select on public.store_public_profiles for select to anon, authenticated
   using (private.store_is_active(store_id));
 create policy profiles_member_select on public.store_public_profiles for select to authenticated
-  using (exists (select 1 from public.stores s where s.id = store_id));
+  using (exists (select 1 from public.stores s where s.id = store_public_profiles.store_id));
 create policy profiles_insert on public.store_public_profiles for insert to authenticated
   with check (exists (
     select 1 from public.stores s
-    where s.id = store_id and private.has_org_role(s.organization_id, array['owner', 'admin']::public.org_role[])
+    where s.id = store_public_profiles.store_id and private.has_org_role(s.organization_id, array['owner', 'admin']::public.org_role[])
   ));
 create policy profiles_update on public.store_public_profiles for update to authenticated
   using (exists (
     select 1 from public.stores s
-    where s.id = store_id and private.has_org_role(s.organization_id, array['owner', 'admin']::public.org_role[])
+    where s.id = store_public_profiles.store_id and private.has_org_role(s.organization_id, array['owner', 'admin']::public.org_role[])
   ))
   with check (exists (
     select 1 from public.stores s
-    where s.id = store_id and private.has_org_role(s.organization_id, array['owner', 'admin']::public.org_role[])
+    where s.id = store_public_profiles.store_id and private.has_org_role(s.organization_id, array['owner', 'admin']::public.org_role[])
   ));
 create policy profiles_delete on public.store_public_profiles for delete to authenticated
   using (exists (
     select 1 from public.stores s
-    where s.id = store_id and private.has_org_role(s.organization_id, array['owner']::public.org_role[])
+    where s.id = store_public_profiles.store_id and private.has_org_role(s.organization_id, array['owner']::public.org_role[])
   ));
 
 -- ---------------------------------------------------------------------------
@@ -298,7 +318,6 @@ grant select, delete on public.organizations to authenticated;
 grant update (name) on public.organizations to authenticated;
 
 grant select, delete on public.memberships to authenticated;
-grant insert (organization_id, user_id, role) on public.memberships to authenticated;
 grant update (role) on public.memberships to authenticated;
 
 grant select, delete on public.stores to authenticated;

@@ -8,7 +8,7 @@
 
 THI-64 needs roles to write RLS policies. The register lists the roles matrix as open, so this records the smallest set implemented and what remains undecided.
 
-## Decision (proposal)
+## Decision
 
 Four organization-level roles: `owner`, `admin`, `manager`, `staff`. Owners manage everything including roles and organization deletion; admins manage stores, managers and staff; managers run day-to-day operations (catalog, stock, orders; policies arrive with those tickets) but cannot edit store settings, public profiles or members; staff is read-only. Platform-only suspension. Full table and invariants: [tenancy and RLS](../security/tenancy-and-rls.md).
 
@@ -18,7 +18,7 @@ Per-store roles (more granular, more policy surface); a separate billing role (d
 
 ## Consequences
 
-Later tickets add per-table policies for each role. Changing the enum or semantics needs a new migration and updated tests. Still open: MFA policy, billing/payout roles, invitation flow (THI-68), ownership-transfer UX.
+Later tickets add per-table policies for each role. Changing the enum or semantics needs a new migration and updated tests. Still open: MFA policy, billing/payout roles, invitation flow (THI-68, which must call the server-only `public.add_member` after the invitee accepts), ownership-transfer UX.
 
 ## Verification and rollback
 

@@ -23,6 +23,46 @@ const manager = user(ids.managerA);
 const ownerOfB = user(ids.ownerB);
 const outsider = user(ids.outsider);
 
+// Reviewed by hand: no INSERT on memberships/organizations (server-only), ids, organization_id,
+// store_id (on update), created_* and updated_at are never writable by API roles.
+const EXPECTED_API_PRIVILEGES = {
+  columns: [
+    "authenticated.memberships.role:UPDATE",
+    "authenticated.organizations.name:UPDATE",
+    "authenticated.store_public_profiles.currency:INSERT",
+    "authenticated.store_public_profiles.default_locale:INSERT",
+    "authenticated.store_public_profiles.display_name:INSERT",
+    "authenticated.store_public_profiles.homepage_mode:INSERT",
+    "authenticated.store_public_profiles.store_id:INSERT",
+    "authenticated.store_public_profiles.currency:UPDATE",
+    "authenticated.store_public_profiles.default_locale:UPDATE",
+    "authenticated.store_public_profiles.display_name:UPDATE",
+    "authenticated.store_public_profiles.homepage_mode:UPDATE",
+    "authenticated.stores.contact_email:INSERT",
+    "authenticated.stores.internal_notes:INSERT",
+    "authenticated.stores.name:INSERT",
+    "authenticated.stores.organization_id:INSERT",
+    "authenticated.stores.slug:INSERT",
+    "authenticated.stores.status:INSERT",
+    "authenticated.stores.contact_email:UPDATE",
+    "authenticated.stores.internal_notes:UPDATE",
+    "authenticated.stores.name:UPDATE",
+    "authenticated.stores.slug:UPDATE",
+    "authenticated.stores.status:UPDATE",
+  ],
+  tables: [
+    "anon.store_public_profiles:SELECT",
+    "authenticated.memberships:DELETE",
+    "authenticated.memberships:SELECT",
+    "authenticated.organizations:DELETE",
+    "authenticated.organizations:SELECT",
+    "authenticated.store_public_profiles:DELETE",
+    "authenticated.store_public_profiles:SELECT",
+    "authenticated.stores:DELETE",
+    "authenticated.stores:SELECT",
+  ],
+};
+
 let db: Db;
 beforeAll(async () => {
   db = await newDatabase(); // replays every migration on an empty database
@@ -33,6 +73,9 @@ afterAll(async () => {
 beforeEach(async () => {
   await seed(db);
 });
+
+const addMember = (org: string, member: string, role: string, actor: string) =>
+  as(db, service, "select public.add_member($1, $2, $3::public.org_role, $4)", [org, member, role, actor]);
 
 const count = async (ctx: Parameters<typeof as>[1], table: string, where = "true") =>
   (await as<{ n: number }>(db, ctx, `select count(*)::int as n from public.${table} where ${where}`)).rows[0]?.n;
@@ -200,11 +243,28 @@ describe("member (organization A) vs tenant B", () => {
     }
   });
 
-  it("cannot forge created_by", async () => {
-    await as(db, owner, `insert into public.memberships (organization_id, user_id, role) values ('${ids.orgA}', '${ids.outsider}', 'staff')`);
+  it("cannot insert memberships directly; add_member (server-only) stamps the actor as created_by", async () => {
+    const direct = `insert into public.memberships (organization_id, user_id, role, created_by) values ('${ids.orgA}', '${ids.outsider}', 'staff', '${ids.ownerB}')`;
+    expect((await rejection(as(db, owner, direct))).code).toBe(PERMISSION);
+    expect((await rejection(as(db, admin, direct))).code).toBe(PERMISSION);
+    await addMember(ids.orgA, ids.outsider, "staff", ids.ownerA);
     const { rows } = await as<{ created_by: string }>(db, service, `select created_by from public.memberships where user_id = '${ids.outsider}'`);
     expect(rows[0]?.created_by).toBe(ids.ownerA);
     expect((await rejection(as(db, owner, `update public.memberships set created_by = '${ids.ownerB}'`))).code).toBe(PERMISSION);
+  });
+
+  it("add_member is not callable by API roles and enforces the actor's role rules", async () => {
+    const call = `select public.add_member('${ids.orgA}', '${ids.outsider}', 'staff', '${ids.ownerA}')`;
+    expect((await rejection(as(db, anon, call))).code).toBe(PERMISSION);
+    expect((await rejection(as(db, owner, call))).code).toBe(PERMISSION);
+    // Server-side role rules, per acting user.
+    for (const [actor, role] of [[ids.adminA, "admin"], [ids.adminA, "owner"], [ids.managerA, "staff"], [ids.staffA, "staff"], [ids.outsider, "staff"], [ids.ownerB, "staff"]] as const) {
+      expect((await rejection(addMember(ids.orgA, ids.outsider, role, actor))).code, `${actor} adds ${role}`).toBe(PERMISSION);
+    }
+    await addMember(ids.orgA, ids.outsider, "manager", ids.adminA);
+    expect(await count(service, "memberships", `user_id = '${ids.outsider}'`)).toBe(1);
+    // An owner may add any role; a duplicate is a plain conflict.
+    expect((await rejection(addMember(ids.orgA, ids.outsider, "admin", ids.ownerA))).code).toBe("23505");
   });
 });
 
@@ -281,7 +341,7 @@ describe("roles and membership transitions", () => {
   it("admin manages stores and staff only", async () => {
     await as(db, admin, `insert into public.stores (organization_id, slug, name) values ('${ids.orgA}', 'admin-store', 'Admin Store')`);
     expect((await as(db, admin, `update public.store_public_profiles set display_name = 'New' where store_id = '${ids.storeA}'`)).affectedRows).toBe(1);
-    await as(db, admin, `insert into public.memberships (organization_id, user_id, role) values ('${ids.orgA}', '${ids.outsider}', 'staff')`);
+    await addMember(ids.orgA, ids.outsider, "staff", ids.adminA);
     expect((await as(db, admin, `delete from public.memberships where user_id = '${ids.outsider}'`)).affectedRows).toBe(1);
 
     for (const role of ["admin", "owner"]) {
@@ -297,7 +357,7 @@ describe("roles and membership transitions", () => {
   });
 
   it("admin also manages managers, but cannot create or touch admins and owners", async () => {
-    await as(db, admin, `insert into public.memberships (organization_id, user_id, role) values ('${ids.orgA}', '${ids.outsider}', 'manager')`);
+    await addMember(ids.orgA, ids.outsider, "manager", ids.adminA);
     expect((await as(db, admin, `update public.memberships set role = 'staff' where user_id = '${ids.outsider}'`)).affectedRows).toBe(1);
     expect((await as(db, admin, `update public.memberships set role = 'manager' where user_id = '${ids.staffA}'`)).affectedRows).toBe(1);
     expect((await as(db, admin, `delete from public.memberships where user_id = '${ids.managerA}'`)).affectedRows).toBe(1);
@@ -377,19 +437,104 @@ describe("public vs private store data and suspension", () => {
     expect(await count(outsider, "store_public_profiles", `store_id = '${ids.storeADraft}'`)).toBe(0);
   });
 
-  it("merchants cannot suspend a store or lift a suspension; the platform can", async () => {
+  it("merchants cannot suspend a store, lift a suspension, or edit, rename or delete a suspended store", async () => {
     expect((await rejection(as(db, owner, `update public.stores set status = 'suspended' where id = '${ids.storeA}'`))).code).toBe(PERMISSION);
     expect((await rejection(as(db, owner, `insert into public.stores (organization_id, slug, name, status) values ('${ids.orgA}', 'born-suspended', 'x', 'suspended')`))).code).toBe(PERMISSION);
     await as(db, service, `update public.stores set status = 'suspended' where id = '${ids.storeA}'`);
     expect(await count(anon, "store_public_profiles", `store_id = '${ids.storeA}'`)).toBe(0);
-    expect((await rejection(as(db, owner, `update public.stores set status = 'active' where id = '${ids.storeA}'`))).code).toBe(PERMISSION);
-    // Other edits to a suspended store remain allowed for members.
-    expect((await as(db, owner, `update public.stores set name = 'Renamed' where id = '${ids.storeA}'`)).affectedRows).toBe(1);
+    expect(await count(outsider, "store_public_profiles", `store_id = '${ids.storeA}'`)).toBe(0);
+    for (const ctx of [owner, admin]) {
+      for (const sql of [
+        `update public.stores set status = 'active' where id = '${ids.storeA}'`,
+        `update public.stores set slug = 'main-a-old' where id = '${ids.storeA}'`,
+        `update public.stores set name = 'Renamed' where id = '${ids.storeA}'`,
+        ...(ctx === owner ? [`delete from public.stores where id = '${ids.storeA}'`] : []),
+      ]) {
+        let code: string | undefined;
+        try {
+          await as(db, ctx, sql);
+        } catch (error) {
+          code = (error as { code?: string }).code;
+        }
+        expect(code, `must be rejected: ${sql}`).toBe(PERMISSION);
+      }
+    }
+    // Admins cannot delete stores at all (RLS: zero rows), so the row is untouched.
+    expect((await as(db, admin, `delete from public.stores where id = '${ids.storeA}'`)).affectedRows).toBe(0);
+    // The takedown cannot be dodged by deleting the whole organization either.
+    expect((await rejection(as(db, owner, `delete from public.organizations where id = '${ids.orgA}'`))).code).toBe(PERMISSION);
+    expect(await count(service, "stores", `id = '${ids.storeA}' and slug = 'main-a' and status = 'suspended'`)).toBe(1);
+    // The platform can lift it again.
+    await as(db, service, `update public.stores set status = 'active' where id = '${ids.storeA}'`);
+    expect(await count(anon, "store_public_profiles", `store_id = '${ids.storeA}'`)).toBe(1);
   });
 
-  it("enforces unique slugs across tenants without leaking the other tenant's store", async () => {
-    const error = await rejection(as(db, ownerOfB, `insert into public.stores (organization_id, slug, name) values ('${ids.orgB}', 'main-a', 'x')`));
+  it("enforces unique slugs across tenants (known oracle: a conflict reveals that a slug, even a draft, exists)", async () => {
+    const error = await rejection(as(db, ownerOfB, `insert into public.stores (organization_id, slug, name) values ('${ids.orgB}', 'draft-a', 'x')`));
     expect(error.code).toBe("23505");
+    // Accepted for now; reserving slugs server-side would remove it (see tenancy-and-rls.md).
+  });
+});
+
+describe("review round 1 regressions", () => {
+  it("denies functions created later by default (EXECUTE is not left to PUBLIC)", async () => {
+    await db.exec("create function public.later_fn() returns int language sql as 'select 1'");
+    try {
+      expect((await rejection(as(db, anon, "select public.later_fn()"))).code).toBe(PERMISSION);
+      expect((await rejection(as(db, owner, "select public.later_fn()"))).code).toBe(PERMISSION);
+    } finally {
+      await db.exec("drop function public.later_fn()");
+    }
+    const open = await db.query<{ routine_name: string }>(
+      `select distinct routine_name from information_schema.routine_privileges
+       where routine_schema = 'public' and grantee in ('anon', 'authenticated', 'PUBLIC')`,
+    );
+    expect(open.rows).toEqual([]);
+  });
+
+  it("pins the API roles' table and column privileges", async () => {
+    const cols = await db.query<{ g: string; t: string; c: string; p: string }>(`
+      select grantee as g, table_name as t, column_name as c, privilege_type as p
+      from information_schema.column_privileges
+      where table_schema = 'public' and grantee in ('anon', 'authenticated')
+        and privilege_type in ('INSERT', 'UPDATE') order by 1, 2, 4, 3`);
+    const tables = await db.query<{ g: string; t: string; p: string }>(`
+      select grantee as g, table_name as t, privilege_type as p
+      from information_schema.table_privileges
+      where table_schema = 'public' and grantee in ('anon', 'authenticated') order by 1, 2, 3`);
+    expect({
+      columns: cols.rows.map((r) => `${r.g}.${r.t}.${r.c}:${r.p}`),
+      tables: tables.rows.map((r) => `${r.g}.${r.t}:${r.p}`),
+    }).toEqual(EXPECTED_API_PRIVILEGES);
+  });
+
+  it("treats a key change on the last owner as a removal", async () => {
+    for (const sql of [
+      `update public.memberships set organization_id = '${ids.orgB}' where user_id = '${ids.ownerA}'`,
+      `update public.memberships set user_id = '${ids.outsider}' where user_id = '${ids.ownerA}'`,
+    ]) {
+      expect((await rejection(as(db, service, sql))).message, sql).toContain("at least one owner");
+    }
+  });
+
+  it("an upsert cannot overwrite an owner row or touch another tenant", async () => {
+    const upsert = (org: string, user: string) =>
+      `insert into public.stores (id, organization_id, slug, name) values ('${ids.storeB}', '${org}', 'x-${user.slice(-2)}', 'x') on conflict (id) do update set name = 'pwned'`;
+    expect((await rejection(as(db, owner, upsert(ids.orgA, ids.ownerA)))).code).toBe(PERMISSION);
+    expect(await count(service, "stores", `id = '${ids.storeB}' and name = 'Main Store'`)).toBe(1);
+  });
+
+  it("cannot update or delete another tenant's public profile", async () => {
+    expect((await as(db, owner, `update public.store_public_profiles set display_name = 'pwned' where store_id = '${ids.storeB}'`)).affectedRows).toBe(0);
+    expect((await as(db, owner, `delete from public.store_public_profiles where store_id = '${ids.storeB}'`)).affectedRows).toBe(0);
+    expect(await count(service, "store_public_profiles", `store_id = '${ids.storeB}' and display_name = 'Main Store'`)).toBe(1);
+  });
+
+  it("an admin cannot demote or remove another admin", async () => {
+    await as(db, service, `update public.memberships set role = 'admin' where user_id = '${ids.managerA}'`);
+    expect((await as(db, admin, `update public.memberships set role = 'staff' where user_id = '${ids.managerA}'`)).affectedRows).toBe(0);
+    expect((await as(db, admin, `delete from public.memberships where user_id = '${ids.managerA}'`)).affectedRows).toBe(0);
+    expect(await count(service, "memberships", `user_id = '${ids.managerA}' and role = 'admin'`)).toBe(1);
   });
 });
 
