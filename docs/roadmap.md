@@ -49,7 +49,8 @@ Security baseline: [threat model](security/threat-model.md) and [ASVS evidence m
 | [THI-75](https://linear.app/thiagosbrito/issue/THI-75/implement-server-authoritative-cart-and-price-quotation) | Implement server-authoritative cart and price quotation | High | THI-69, THI-74 |
 | [THI-76](https://linear.app/thiagosbrito/issue/THI-76/implement-country-rules-and-shipping-rate-quotes) | Implement country rules and shipping rate quotes | High | THI-75 |
 | [THI-77](https://linear.app/thiagosbrito/issue/THI-77/implement-inventory-reservations-with-safe-expiry) | Implement inventory reservations with safe expiry | High | THI-75 |
-| [THI-78](https://linear.app/thiagosbrito/issue/THI-78/implement-order-state-machine-and-fulfillment-foundation) | Implement order state machine and fulfillment foundation | High | THI-76, THI-77 |
+| [THI-78](https://linear.app/thiagosbrito/issue/THI-78/implement-order-state-machine-and-fulfillment-foundation) | Implement order state machine and fulfillment foundation | High | THI-76, THI-77, THI-89 |
+| [THI-89](https://linear.app/thiagosbrito/issue/THI-89/implement-passwordless-shopper-accounts-with-per-store-isolation) | Implement passwordless shopper accounts with per-store isolation | High | THI-64, THI-65, THI-66 |
 
 ## M5 · Merchant Payments & SaaS Billing
 

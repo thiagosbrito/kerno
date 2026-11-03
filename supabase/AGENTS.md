@@ -1,0 +1,3 @@
+# supabase scope
+
+Root AGENTS.md applies. Versioned, forward-only migrations in `migrations/`; never edit an applied migration, add a new one. Every table in `public` needs RLS enabled, explicit policies and explicit least-privilege grants (default privileges for `anon`/`authenticated` are revoked). Tenant and role decisions come from current `memberships` rows, never from JWT custom claims or `user_metadata`. `SECURITY DEFINER` functions need `set search_path = ''`, an entry in the allowlist in `tests/rls.test.ts` and a justification in the migration. `rollbacks/` holds manual, pre-production undo scripts that are not applied automatically. Tests run real SQL (PGlite); mocks cannot prove RLS. See [tenancy and RLS](../docs/security/tenancy-and-rls.md).

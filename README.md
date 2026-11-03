@@ -4,7 +4,7 @@ Multi-tenant, customizable e-commerce SaaS for merchants in Brazil and Poland. M
 
 ## Repository status
 
-Bootstrapped pnpm/Turborepo workspace: `apps/admin`, `apps/storefront`, `packages/contracts`, `packages/server`, `packages/ui`. There is no database migration, tenant model, authentication or deployment yet (see the [roadmap](docs/roadmap.md)). `packages/domain` and `supabase/` are created by the tickets that need them.
+Bootstrapped pnpm/Turborepo workspace: `apps/admin`, `apps/storefront`, `packages/contracts`, `packages/server`, `packages/ui`, `supabase` (migrations and RLS tests; see [tenancy and RLS](docs/security/tenancy-and-rls.md)). There is a tenant/membership schema but no authentication or deployment yet (see the [roadmap](docs/roadmap.md)). `packages/domain` is created by the ticket that needs it.
 
 ## Local development
 
@@ -18,7 +18,7 @@ pnpm dev        # admin on :3000, storefront on :3001
 
 Checks: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm test:bundles` (builds with sentinel secrets and fails if server-only names/values reach client bundles), `pnpm test:bundles:self` (unit-tests the bundle checker), `pnpm test:e2e` (Playwright on ports 3100/3101; run `pnpm exec playwright install chromium` once), `pnpm docs:check`, `pnpm scan:secrets`, `pnpm test:secrets:self`, `pnpm check:workflows`, `pnpm test:workflows:self`, `pnpm audit:deps`, `git diff --check` (locally this covers uncommitted changes only; CI checks committed changes against the base commit and also runs `git diff --exit-code`). CI otherwise runs the same commands; see [CI and branch protection](docs/steering/ci.md).
 
-`.env.example` lists names only; `pnpm setup:env` fills non-secret placeholders for local use, and real Supabase values replace them once a local database exists. Apps fail closed on missing or malformed environment configuration (an `EnvError` page means `.env.local` is absent or invalid). The Supabase CLI and local database are not set up yet.
+`.env.example` lists names only; `pnpm setup:env` fills non-secret placeholders for local use, and real Supabase values replace them once a local database exists. Apps fail closed on missing or malformed environment configuration (an `EnvError` page means `.env.local` is absent or invalid). Local database: with Docker running, `pnpm db:start` starts a local Supabase stack (Supabase CLI pinned in `package.json`, config in `supabase/config.toml`), `pnpm db:reset` recreates it from `supabase/migrations`, `pnpm test:db` runs the RLS suite against it and `pnpm db:stop` stops it. Copy the printed local API URL and keys into `.env.local` yourself; never commit them. Plain `pnpm test` needs no Docker (it replays migrations in-process).
 
 - [Agent entry point](AGENTS.md)
 - [Roadmap and Linear tickets](docs/roadmap.md)
