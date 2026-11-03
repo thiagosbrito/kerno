@@ -9,7 +9,7 @@ Approved: platform-hosted shared Next.js/Supabase multi-tenancy; RLS plus server
 ## Open decisions
 
 - Toolchain pinned in THI-61 (Node 24.16.0, pnpm 11.22.0, Next 16.4.5, React 19.3.1, TypeScript 6.0.3 because typescript-eslint supports `<6.1`, Vitest 5.1.0, Zod 4.6.7, Tailwind 4.3.4, Playwright 1.64.1). shadcn/ui with Base UI, `packages/domain` and `supabase/` are deferred to the tickets that first need them.
-- Threat model and applicable ASVS evidence/exception policy: security foundation.
+- Threat model and ASVS evidence map: proposed baseline in [threat model](../security/threat-model.md) and [ASVS evidence map](../security/asvs-evidence-map.md) (THI-63); not an accepted decision until the owner approves. The per-requirement L2 import is planned under THI-88. Roles matrix, MFA policy, rate-limit numbers, evidence owners, who owns transactional email (or whether it is out of scope) and the abuse-reporting/takedown process for AC-36 remain open.
 - Payment providers, country/currency support, onboarding model and payment scope: provider selection before payment adapters.
 - Plan prices/limits and grace/downgrade policy: subscription implementation.
 - Shipping integrations, taxation, returns/refunds, retention and legal responsibilities: relevant domain tickets and qualified market review.

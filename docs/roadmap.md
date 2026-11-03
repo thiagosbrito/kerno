@@ -2,9 +2,11 @@
 
 [Linear project](https://linear.app/thiagosbrito/project/kerno-ef4b1e3f582c/overview) owns live status, priorities, blockers and acceptance criteria. This index is a bootstrap snapshot, not a second status tracker. Read [AGENTS.md](../AGENTS.md) and [workflow](steering/workflow.md) before taking a ticket. High = P2 in Linear's numeric API (priority 2); Medium = priority 3. No deadlines are assigned.
 
-Milestone gates proceed M0 → M1 → M2 → M3 → M4 → M5 → M6. Native ticket blockers record specific prerequisites; milestone security and exit evidence also apply. Security work is continuous. This commit addresses the guidance ticket only; it does not complete the toolchain, CI or threat-model work in M0.
+Milestone gates proceed M0 → M1 → M2 → M3 → M4 → M5 → M6. Native ticket blockers record specific prerequisites; milestone security and exit evidence also apply. Security work is continuous. Linear is the source of truth for the status of every ticket listed here.
 
 ## M0 · Repository & Agent Foundation
+
+Security baseline: [threat model](security/threat-model.md) and [ASVS evidence map](security/asvs-evidence-map.md) define abuse cases, exclusions and per-milestone security exit evidence.
 
 | Ticket | Scope | Priority | Blocked by |
 | --- | --- | --- | --- |
@@ -38,6 +40,7 @@ Milestone gates proceed M0 → M1 → M2 → M3 → M4 → M5 → M6. Native tic
 | [THI-72](https://linear.app/thiagosbrito/issue/THI-72/define-versioned-page-schemas-theme-tokens-and-block-registry) | Define versioned page schemas, theme tokens and block registry | High | THI-71 |
 | [THI-73](https://linear.app/thiagosbrito/issue/THI-73/build-accessible-visual-editor-with-draft-persistence) | Build accessible visual editor with draft persistence | Medium | THI-72 |
 | [THI-74](https://linear.app/thiagosbrito/issue/THI-74/implement-isolated-previews-atomic-publishing-and-rollback) | Implement isolated previews, atomic publishing and rollback | High | THI-73 |
+| [THI-88](https://linear.app/thiagosbrito/issue/THI-88/import-asvs-50-l2-requirements-into-per-requirement-evidence-table) | Import ASVS 5.0 L2 requirements into per-requirement evidence table | High | None |
 
 ## M4 · Commerce, Shipping & Rules
 
@@ -62,7 +65,7 @@ Milestone gates proceed M0 → M1 → M2 → M3 → M4 → M5 → M6. Native tic
 
 | Ticket | Scope | Priority | Blocked by |
 | --- | --- | --- | --- |
-| [THI-84](https://linear.app/thiagosbrito/issue/THI-84/complete-asvs-l2-verification-and-remediate-findings) | Complete ASVS L2 verification and remediate findings | High | THI-82, THI-83, THI-62, THI-63 |
+| [THI-84](https://linear.app/thiagosbrito/issue/THI-84/complete-asvs-l2-verification-and-remediate-findings) | Complete ASVS L2 verification and remediate findings | High | THI-82, THI-83, THI-62, THI-63, THI-88 |
 | [THI-85](https://linear.app/thiagosbrito/issue/THI-85/validate-brazilpoland-privacy-and-commerce-readiness) | Validate Brazil/Poland privacy and commerce readiness | High | THI-79, THI-76, THI-83 |
 | [THI-86](https://linear.app/thiagosbrito/issue/THI-86/establish-deployment-telemetry-backup-and-recovery) | Establish deployment, telemetry, backup and recovery | High | THI-81, THI-83, THI-62 |
 | [THI-87](https://linear.app/thiagosbrito/issue/THI-87/validate-performance-accessibility-and-release-beta-gates) | Validate performance, accessibility and release beta gates | High | THI-84, THI-85, THI-86 |
