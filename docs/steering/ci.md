@@ -10,7 +10,7 @@ Workflow: `.github/workflows/ci.yml`. It runs on `pull_request` and pushes to `m
 | Browser (Playwright) | `pnpm exec playwright install chromium` once, then `pnpm test:e2e` |
 | Security | `pnpm test:secrets:self`, `pnpm scan:secrets`, `pnpm test:workflows:self`, `pnpm check:workflows`, `pnpm audit:deps` |
 
-`scripts/scan_secrets.py` is an offline pattern scan of tracked files (private keys, cloud/provider tokens, JWT-shaped values, credential-like assignments). It prints file, line and rule only, never the value. Placeholder and sentinel values are ignored; a line may carry `secret-scan: allow` for a documented fixture, but the marker is honoured only in `scripts/test_*.py`; anywhere else it is ignored and the finding stands. Quoted keys (`"API_KEY": "..."`) and Supabase `sb_secret_` keys are detected, and a placeholder on a line does not hide a later real value. It complements, not replaces, a managed scanner such as GitHub secret scanning with push protection, which should be enabled in repository settings. A real finding means rotate the credential first, then remove it.
+`scripts/scan_secrets.py` is an offline pattern scan of tracked files (private keys, cloud/provider tokens, JWT-shaped values, credential-like assignments). It prints file, line and rule only, never the value. Placeholder and sentinel values are ignored; a line may carry `secret-scan: allow` for a documented fixture, but the marker is honoured only in `scripts/test_*.py`; anywhere else it is ignored and the finding stands. Quoted keys (`"API_KEY": "..."`) and Supabase `sb_secret_` keys are detected, and a placeholder on a line does not hide a later real value. It complements, not replaces, GitHub secret scanning with push protection, which is enabled for this public repository. A real finding means rotate the credential first, then remove it.
 
 `scripts/check_workflows.py` statically checks every `.github/workflows/*.y*ml` (line/regex, no YAML parser, offline) and prints `file:line: rule`. It fails on the triggers `pull_request_target` and `workflow_run`, any `secrets.` reference or bare `secrets` inside a single-line `${{ }}` expression or `if:` (for example `toJSON(secrets)`), a missing top-level `permissions` block (job-level blocks do not satisfy it) or any `permissions` value other than `contents: read` (including job-level overrides), any `uses:` not pinned to a 40-hex commit SHA (local `./` actions are allowed; a `uses:` value on the next line or in flow style `{ uses: ... }` is also reported), and any `actions/checkout` step (case-insensitive) without `persist-credentials: false`. This guards the untrusted-PR rules above against accidental regressions in review; `pnpm test:workflows:self` exercises it with synthetic good and bad workflow text. It is an accidental-change guard, not a security boundary: comment stripping is naive (a ` #` inside a quoted string hides the rest of the line), multi-line expressions are not analysed, and it does not validate YAML or prove runtime behaviour. Branch protection and review remain the real controls.
 
@@ -18,17 +18,17 @@ Whitespace and generated-file checks: in CI the Quality job fetches full history
 
 `pnpm audit:deps` fails on high or critical advisories and needs network access. Lower severities are reported but do not block; triage them in the PR.
 
-## Branch protection (repository owner applies in GitHub settings)
+## Branch protection (applied)
 
-For `main` (Settings → Branches → rule, or a ruleset):
+The repository is public, so GitHub rulesets are available. Ruleset `Main` is active on `main` with an empty bypass list (it applies to administrators):
 
-1. Require a pull request before merging; require at least one approval; dismiss stale approvals on new commits.
-2. Require status checks to pass, branch up to date before merging, with these required checks: `Quality (lint, typecheck, test, build, bundles, docs)`, `Browser (Playwright)`, `Security (secret scan, dependency audit)`. A check name appears in the picker only after it has run once.
-3. Block force pushes and deletions; apply to administrators.
-4. Under Settings → Actions → General: default workflow token permissions "Read repository contents", and require approval for workflows from outside collaborators.
-5. Enable Dependabot alerts, secret scanning and push protection where the plan allows.
+- restrict deletions and block force pushes;
+- require a pull request, 0 required approvals while there is a single contributor (raise to 1 when a second reviewer exists), dismiss stale approvals on push, require conversation resolution;
+- require status checks, branch up to date before merging: `Quality (lint, typecheck, test, build, bundles, docs)`, `Browser (Playwright)`, `Security (secret scan, dependency audit)`.
 
-These settings are not stored in the repository; until applied, failing checks do not block merge.
+Also set: Settings → Actions → General → workflow token "Read repository contents" and approval required for workflows from outside collaborators; secret scanning and push protection enabled. Rulesets live in GitHub settings, not in the repository; re-check them with `gh api repos/thiagosbrito/kerno/rulesets`. Because the repository is public, never commit credentials, production data or customer information.
+
+Verified 2026-11-03: a throwaway PR with a lint error and a whitespace error failed the Quality job and GitHub reported it as blocked (`gh pr merge` refused).
 
 ## Verifying that failures block
 

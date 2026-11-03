@@ -28,6 +28,6 @@ Checks: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm test:bun
 - [Workflow](docs/steering/workflow.md)
 - [Decision register](docs/decisions/README.md)
 
-Linear owns priorities, status, dependencies and acceptance criteria. This private repository owns source, implementation decisions and agent guidance. The planning source is the [KERNO project](https://linear.app/thiagosbrito/project/kerno-ef4b1e3f582c/overview); the user-managed Visual Blueprint v0.5 was not available during this bootstrap and must be reconciled before conflicting product details are implemented.
+Linear owns priorities, status, dependencies and acceptance criteria. This public repository owns (so never commit credentials, production data or customer information) source, implementation decisions and agent guidance. The planning source is the [KERNO project](https://linear.app/thiagosbrito/project/kerno-ef4b1e3f582c/overview); the user-managed Visual Blueprint v0.5 was not available during this bootstrap and must be reconciled before conflicting product details are implemented.
 
 Documentation links are validated with `pnpm docs:check`.
