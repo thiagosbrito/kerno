@@ -1,0 +1,14 @@
+# Local credentials and generated artifacts
+.env
+.env.*
+!.env.example
+node_modules/
+.next/
+.turbo/
+dist/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+.DS_Store
+*.log
