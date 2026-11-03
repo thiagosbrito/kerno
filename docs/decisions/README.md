@@ -8,13 +8,17 @@ Approved: platform-hosted shared Next.js/Supabase multi-tenancy; RLS plus server
 
 ## Open decisions
 
-- Runtime/toolchain versions and concrete workspace boundaries: monorepo bootstrap.
+- Toolchain pinned in THI-61 (Node 24.16.0, pnpm 11.22.0, Next 16.4.5, React 19.3.1, TypeScript 6.0.3 because typescript-eslint supports `<6.1`, Vitest 5.1.0, Zod 4.6.7, Tailwind 4.3.4, Playwright 1.64.1). shadcn/ui with Base UI, `packages/domain` and `supabase/` are deferred to the tickets that first need them.
 - Threat model and applicable ASVS evidence/exception policy: security foundation.
 - Payment providers, country/currency support, onboarding model and payment scope: provider selection before payment adapters.
 - Plan prices/limits and grace/downgrade policy: subscription implementation.
 - Shipping integrations, taxation, returns/refunds, retention and legal responsibilities: relevant domain tickets and qualified market review.
 - Hosting, SLOs, RPO/RTO, performance budgets and incident ownership: operations/readiness tickets.
 - Unavailable blueprint details: reconcile when supplied; record any conflicts before implementation.
+
+## Records
+
+- [0001 · Temporary pnpm release-age exemptions](0001-temporary-release-age-exemptions.md) — accepted, expires 2026-11-04T18:02Z.
 
 ## Recording a new decision
 
