@@ -16,7 +16,7 @@ pnpm setup:env  # writes apps/*/.env.local with placeholder values (never overwr
 pnpm dev        # admin on :3000, storefront on :3001
 ```
 
-Checks: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm test:bundles` (builds with sentinel secrets and fails if server-only names/values reach client bundles), `pnpm test:e2e` (Playwright on ports 3100/3101; run `pnpm exec playwright install chromium` once), `pnpm docs:check`, `git diff --check`.
+Checks: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm test:bundles` (builds with sentinel secrets and fails if server-only names/values reach client bundles), `pnpm test:bundles:self` (unit-tests the bundle checker), `pnpm test:e2e` (Playwright on ports 3100/3101; run `pnpm exec playwright install chromium` once), `pnpm docs:check`, `git diff --check`.
 
 `.env.example` lists names only; `pnpm setup:env` fills non-secret placeholders for local use, and real Supabase values replace them once a local database exists. Apps fail closed on missing or malformed environment configuration (an `EnvError` page means `.env.local` is absent or invalid). The Supabase CLI and local database are not set up yet.
 

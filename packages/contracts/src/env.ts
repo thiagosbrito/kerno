@@ -1,10 +1,12 @@
 import { z } from "zod";
 
+const httpUrl = z.url({ protocol: /^https?$/ });
+
 /** Browser-safe configuration. Only NEXT_PUBLIC_* names belong here. */
 export const publicEnvSchema = z.object({
-  NEXT_PUBLIC_ADMIN_URL: z.url(),
-  NEXT_PUBLIC_STOREFRONT_URL: z.url(),
-  NEXT_PUBLIC_SUPABASE_URL: z.url(),
+  NEXT_PUBLIC_ADMIN_URL: httpUrl,
+  NEXT_PUBLIC_STOREFRONT_URL: httpUrl,
+  NEXT_PUBLIC_SUPABASE_URL: httpUrl,
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
 });
 

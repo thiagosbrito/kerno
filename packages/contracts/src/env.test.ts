@@ -26,6 +26,14 @@ describe("env contracts", () => {
     expect(() => parseServerEnv({ ...valid, NEXT_PUBLIC_ADMIN_URL: "not a url" })).toThrow(EnvError);
   });
 
+  it("accepts only http and https URLs", () => {
+    expect(() => parseServerEnv({ ...valid, NEXT_PUBLIC_ADMIN_URL: "https://admin.example.com" })).not.toThrow();
+    for (const bad of ["javascript:alert(1)", "ftp://x", "data:text/html,x"]) {
+      expect(() => parseServerEnv({ ...valid, NEXT_PUBLIC_ADMIN_URL: bad })).toThrow(EnvError);
+      expect(() => parsePublicEnv({ ...valid, NEXT_PUBLIC_SUPABASE_URL: bad })).toThrow(EnvError);
+    }
+  });
+
   it("does not leak submitted values in error messages", () => {
     try {
       parseServerEnv({ ...valid, NEXT_PUBLIC_ADMIN_URL: "bad-secret-value" });
