@@ -2,6 +2,11 @@
 -- Forward-only. Manual pre-production undo: supabase/rollbacks/20261104090000_store_domains.down.sql.
 -- Builds on 20261103210000_tenancy_core.sql. Design: docs/security/host-routing.md.
 
+-- Slugs become hostnames (<slug>.<platform domain>), so names that could impersonate the
+-- platform are reserved. Keep in step with RESERVED_STORE_SLUGS in packages/contracts (a test
+-- compares the two lists).
+alter table public.stores add constraint stores_slug_not_reserved check (slug not in ('www', 'api', 'app', 'admin', 'auth', 'login', 'logout', 'signup', 'register', 'account', 'accounts', 'billing', 'checkout', 'cdn', 'assets', 'static', 'media', 'mail', 'email', 'smtp', 'ftp', 'status', 'support', 'help', 'docs', 'blog', 'dashboard', 'console', 'kerno', 'platform', 'root', 'staging', 'preview'));
+
 -- A claim is a request to serve a hostname for a store. Only a VERIFIED claim on an ACTIVE
 -- store ever resolves (see the resolve_* functions). Hostnames are stored normalized:
 -- lowercase ASCII (punycode for IDNs), no port, no trailing dot, at least two labels, and a
@@ -53,8 +58,8 @@ returns table (domain_id uuid, verification_token text)
 language plpgsql set search_path = ''
 as $$
 begin
-  if platform_domain is null or platform_domain = '' then
-    raise exception 'platform domain required' using errcode = '22023';
+  if platform_domain is null or platform_domain !~ '^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$' then
+    raise exception 'platform domain must be a normalized lowercase hostname' using errcode = '22023';
   end if;
   if host = platform_domain or right(host, char_length(platform_domain) + 1) = '.' || platform_domain then
     raise exception 'hostname is reserved by the platform' using errcode = '42501';

@@ -9,11 +9,7 @@ import { NextResponse, type NextRequest } from "next/server";
  */
 export async function proxy(request: NextRequest): Promise<NextResponse> {
   const decision = await getStoreRouter().route(request.headers);
-  if (decision.action === "serve") {
-    const response = NextResponse.next();
-    response.headers.set("Vary", "Host");
-    return response;
-  }
+  if (decision.action === "serve") return NextResponse.next();
   const headers = { "Cache-Control": "no-store", "Content-Type": "text/plain; charset=utf-8" };
   if (decision.action === "unavailable") {
     return new NextResponse("Service temporarily unavailable", { status: 503, headers: { ...headers, "Retry-After": "5" } });
@@ -22,6 +18,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
 }
 
 export const config = {
-  // Everything except Next's static asset routes, which carry no tenant data.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // Everything except Next's static asset routes, which carry no tenant data. The image
+  // optimizer is gated too; THI-74 must revisit it once images become store-specific.
+  matcher: ["/((?!_next/static|favicon.ico).*)"],
 };

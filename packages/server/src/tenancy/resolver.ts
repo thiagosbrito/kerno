@@ -1,4 +1,4 @@
-import { STORE_SLUG_PATTERN, type ResolvedStore } from "@kerno/contracts";
+import { RESERVED_STORE_SLUGS, STORE_SLUG_PATTERN, type ResolvedStore } from "@kerno/contracts";
 import { BoundedTtlCache, DEFAULT_CACHE_OPTIONS, type CacheOptions } from "./cache";
 
 export type StoreLookup =
@@ -49,14 +49,22 @@ export function createStoreResolver(options: ResolverOptions): StoreResolver {
   const opts: CacheOptions = { ...DEFAULT_CACHE_OPTIONS, ...options.cache };
   const cache = new BoundedTtlCache<CachedLookup>(opts.maxEntries, opts.now);
   const suffix = `.${options.platformDomain}`;
+  const inflight = new Map<string, Promise<StoreLookup>>();
 
   async function lookup(key: string, run: () => Promise<StoreLookup>): Promise<StoreLookup> {
     const cached = cache.get(key);
     if (cached.hit) return cached.value;
-    const result = await run();
-    if (result.status === "found") cache.set(key, result, opts.positiveTtlMs);
-    else if (result.status === "not_found") cache.set(key, result, opts.negativeTtlMs);
-    return result;
+    // Concurrent misses for one host share a single directory call.
+    const pending = inflight.get(key);
+    if (pending !== undefined) return pending;
+    const call = (async () => {
+      const result = await run();
+      if (result.status === "found") cache.set(key, result, opts.positiveTtlMs);
+      else if (result.status === "not_found") cache.set(key, result, opts.negativeTtlMs);
+      return result;
+    })().finally(() => inflight.delete(key));
+    inflight.set(key, call);
+    return call;
   }
 
   return {
@@ -67,7 +75,7 @@ export function createStoreResolver(options: ResolverOptions): StoreResolver {
       let result: StoreLookup;
       if (hostname.endsWith(suffix)) {
         const label = hostname.slice(0, -suffix.length);
-        if (label.includes(".") || !STORE_SLUG_PATTERN.test(label)) return { kind: "unknown" };
+        if (label.includes(".") || !STORE_SLUG_PATTERN.test(label) || RESERVED_STORE_SLUGS.includes(label)) return { kind: "unknown" };
         hostKind = "platform";
         result = await lookup(hostname, () => options.directory.bySlug(label));
         // Defense in depth against a directory that answers for a different store.

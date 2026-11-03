@@ -8,4 +8,5 @@ drop function if exists public.release_domain(uuid);
 drop function if exists public.confirm_domain(uuid, boolean);
 drop function if exists public.claim_domain(uuid, text, text);
 drop table if exists public.store_domains;
+alter table public.stores drop constraint if exists stores_slug_not_reserved;
 commit;

@@ -1,5 +1,6 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import type { ResolvedStore } from "@kerno/contracts";
+import { RESERVED_STORE_SLUGS, type ResolvedStore } from "@kerno/contracts";
 import { createStoreResolver, type StoreDirectory, type StoreLookup } from "./resolver";
 import { routeRequest } from "./route-request";
 import type { HeaderReader } from "./request-host";
@@ -93,6 +94,39 @@ describe("unknown and unverified hosts cannot resolve a store", () => {
     };
     const resolver = createStoreResolver({ directory, platformDomain: PLATFORM });
     expect(await resolver.resolve("acme-books.localhost")).toEqual({ kind: "unknown" });
+  });
+});
+
+describe("reserved and concurrent lookups", () => {
+  it("never resolves reserved platform names, even if a directory returns a store for them", async () => {
+    const calls: string[] = [];
+    const directory: StoreDirectory = {
+      byHost: async () => ({ status: "not_found" }),
+      bySlug: async (slug) => {
+        calls.push(slug);
+        return { status: "found", store: store(9, slug) };
+      },
+    };
+    const resolver = createStoreResolver({ directory, platformDomain: PLATFORM });
+    for (const label of ["www", "api", "login", "auth", "kerno"]) {
+      expect(await resolver.resolve(`${label}.localhost`), label).toEqual({ kind: "unknown" });
+    }
+    expect(calls).toEqual([]);
+  });
+
+  it("matches the CHECK in the migration", () => {
+    const sql = readFileSync(new URL("../../../../supabase/migrations/20261104090000_store_domains.sql", import.meta.url), "utf8");
+    const match = /stores_slug_not_reserved check \(slug not in \(([^)]*)\)\)/.exec(sql);
+    const fromSql = [...(match?.[1] ?? "").matchAll(/'([a-z0-9-]+)'/g)].map((m) => m[1]);
+    expect(fromSql).toEqual([...RESERVED_STORE_SLUGS]);
+  });
+
+  it("shares one directory call between concurrent misses for a host", async () => {
+    const { directory, calls } = fakeDirectory();
+    const resolver = createStoreResolver({ directory, platformDomain: PLATFORM });
+    const results = await Promise.all(Array.from({ length: 10 }, () => resolver.resolve("acme-books.localhost")));
+    expect(calls).toEqual(["slug:acme-books"]);
+    expect(new Set(results.map((r) => r.kind === "store" && r.store.storeId)).size).toBe(1);
   });
 });
 

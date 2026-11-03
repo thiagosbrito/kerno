@@ -83,6 +83,16 @@ describe("host resolution", () => {
   });
 });
 
+describe("reserved platform names", () => {
+  it("refuses slugs that could impersonate the platform, for create and rename", async () => {
+    for (const slug of ["www", "api", "login", "auth", "status", "kerno"]) {
+      expect((await rejection(as(db, service, `insert into public.stores (organization_id, slug, name) values ('${ids.orgA}', '${slug}', 'x')`))).code, slug).toBe(CHECK_VIOLATION);
+      expect((await rejection(as(db, service, `update public.stores set slug = '${slug}' where id = '${ids.storeA}'`))).code, slug).toBe(CHECK_VIOLATION);
+    }
+    await as(db, service, `insert into public.stores (organization_id, slug, name) values ('${ids.orgA}', 'www-shop', 'ok')`);
+  });
+});
+
 describe("claims and duplicate claims", () => {
   it("is idempotent for the same store and hostname", async () => {
     const first = await claim(ids.storeA, "shop.a.example.test");
@@ -110,7 +120,9 @@ describe("claims and duplicate claims", () => {
     for (const host of ["evilkerno.app", "kerno.app.evil.test", "kerno.apps.test"]) {
       await claim(ids.storeA, host);
     }
-    expect((await rejection(claim(ids.storeA, "x.example.test", ""))).code).toBe("22023");
+    for (const platform of ["", "Kerno.app", "kerno.app.", ".kerno.app", "ker no.app"]) {
+      expect((await rejection(claim(ids.storeA, "x.example.test", platform))).code, platform).toBe("22023");
+    }
   });
 
   it("rejects malformed hostnames at the table level", async () => {

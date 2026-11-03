@@ -8,6 +8,9 @@ export const STORE_SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/;
 
 const hostname = z.string().max(HOSTNAME_MAX_LENGTH).regex(HOSTNAME_PATTERN);
 
+/** Slugs that cannot be stores because they would become <slug>.<platform domain>. Mirrors the CHECK stores_slug_not_reserved. */
+export const RESERVED_STORE_SLUGS: readonly string[] = ["www", "api", "app", "admin", "auth", "login", "logout", "signup", "register", "account", "accounts", "billing", "checkout", "cdn", "assets", "static", "media", "mail", "email", "smtp", "ftp", "status", "support", "help", "docs", "blog", "dashboard", "console", "kerno", "platform", "root", "staging", "preview"];
+
 /** Row returned by public.resolve_store_by_host / resolve_store_by_slug. Only these fields are public. */
 export const resolvedStoreSchema = z
   .object({

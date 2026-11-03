@@ -9,7 +9,7 @@ One storefront deployment serves many stores. The only input that selects a stor
 | Platform subdomain | `acme-books.<PLATFORM_DOMAIN>` | exactly one label under the platform domain that is a valid store slug, and the store is `active` |
 | Custom domain | `shop.acme-sneakers.test` | a `store_domains` row has `verified_at` set and the store is `active` |
 
-Never a store: the platform apex, nested names under it (`a.b.<PLATFORM_DOMAIN>`), pending/unverified claims, draft or suspended stores, IP literals, single-label names, anything malformed. These resolve to a generic 404 with `Cache-Control: no-store`.
+Slug names that could impersonate the platform (`www`, `api`, `login`, `auth`, `status`, `kerno`, ... see `RESERVED_STORE_SLUGS`) are rejected by a CHECK on `stores.slug` and again by the resolver. Never a store: the platform apex, nested names under it (`a.b.<PLATFORM_DOMAIN>`), pending/unverified claims, draft or suspended stores, IP literals, single-label names, anything malformed. These resolve to a generic 404 with `Cache-Control: no-store`.
 
 **Normalization** (`packages/server/src/tenancy/hostname.ts`) accepts one host: trims nothing (whitespace is rejected), lowercases, strips one port and one trailing dot, converts IDNs to punycode, then requires 2+ LDH labels, a letter-led TLD and the DNS length limits. Userinfo, paths, queries, backslashes, control characters, IPv4/IPv6 literals and comma lists are rejected. The same shape is enforced by a CHECK on `store_domains.hostname` and by the resolver SQL functions matching exactly (they never normalize), so a non-normalized spelling cannot match.
 
@@ -19,6 +19,7 @@ Hosting is undecided (THI-86), so the policy is hosting-independent and fail-clo
 
 - **Default (`TRUSTED_FORWARDED_HOST_HEADER` unset):** only the `Host` header is read. `X-Forwarded-Host`, `Forwarded`, `X-Original-Host`, `X-Host` and similar are ignored, so a client cannot choose a store by sending them.
 - **Trusted edge:** set `TRUSTED_FORWARDED_HOST_HEADER` to the name of the **one** header your edge/proxy sets with the public hostname (`x-...` only). The edge **must overwrite or strip** that header on every inbound request; the app cannot verify who set it. When set, `Host` is ignored and a missing header fails closed (404), never falling back to `Host`.
+- The edge must reject requests with more than one `Host` header and must normalize the authority (absolute-URI request lines), so a cache in front of the app and the origin agree on the host.
 - A comma-separated value (appended by a hop, or injected by a client) is ambiguous and rejected.
 - Operational requirement, not enforced by code: the origin must not be reachable except through the trusted edge when this mode is on. Revisit when THI-86 chooses hosting.
 
@@ -43,9 +44,9 @@ The caller of these functions (THI-68 merchant UI/API) must authorize the acting
 
 ## Caching (AC-8)
 
-- Resolver cache: in-process, keyed by the **normalized hostname** only, bounded (default 1000 entries, oldest evicted), positive TTL 30 s, negative TTL 5 s. Case/port/trailing-dot variants share one entry; no forwarded value can reach a key; two stores cannot share an entry because the key is the host and the value is validated against the slug asked for. Outages are never cached.
+- Resolver cache: in-process, keyed by the **normalized hostname** only, bounded (default 1000 entries, oldest evicted), positive TTL 30 s, negative TTL 5 s. Case/port/trailing-dot variants share one entry; no forwarded value can reach a key; two stores cannot share an entry because the key is the host. For platform subdomains the returned slug is also checked against the label asked for; custom hosts rely on the database's exact match. Concurrent misses for one host share one directory call. Random-host floods can still evict good entries (memory stays bounded) and send lookups to the database; rate limiting is a hosting-level follow-up (THI-86). Outages are never cached.
 - Staleness bound: releasing a domain, suspending a store or verifying a new domain takes effect within one TTL per server process (no cross-process invalidation yet).
-- Responses: the proxy sets `Vary: Host`; refusals are `no-store`; the page is `force-dynamic`. Until tenant-aware page/data caching exists (THI-74), nothing tenant-specific is cached.
+- Responses: refusals and served pages are `Cache-Control: no-store` (the page is `force-dynamic`; asserted in the seeded e2e). A `Vary: Host` header could not be made to survive Next.js's own `Vary` handling on page responses, so the protection is `no-store`, and any shared cache or CDN in front must not cache storefront HTML across hosts (an edge requirement to settle in THI-86). Until tenant-aware page/data caching exists (THI-74), nothing tenant-specific is cached.
 - `tenantCacheKey({storeId, scope, publicationVersion?, locale?, currency?})` is the required constructor for any future shared cache key: it requires a valid store id and is JSON-encoded so parts cannot collide.
 
 ## Not covered here
@@ -54,6 +55,8 @@ The caller of these functions (THI-68 merchant UI/API) must authorize the acting
 - Cookies and sibling-subdomain isolation (AC-35): no cookies are issued yet. Shopper/admin cookies must be `__Host-` prefixed (host-only) and admin must live on a different registrable domain from store subdomains (THI-66, THI-89).
 - TLS/certificates for custom domains, HSTS, rate limiting, abuse takedown (AC-36), DNS-rebind/dangling-record re-verification, and cross-process cache invalidation: not implemented; owned by THI-86 and later tickets.
 - Store activation is not gated yet (THI-83): any `active` store with a verified host serves.
+- Slug reuse: a store that renames its slug or is deleted frees `<slug>.<PLATFORM_DOMAIN>` for another tenant, who then inherits old links within one cache TTL. Retired-slug tracking or a slug-change policy is **not** implemented; decide it with merchant onboarding (THI-68) / activation (THI-83). Only the server can create organizations today, so no merchant can exploit this yet.
+- The claim path (THI-68) must require `normalizeHostname(input) === input`; the database CHECK still accepts malformed punycode labels (they can never resolve).
 
 ## Verification
 

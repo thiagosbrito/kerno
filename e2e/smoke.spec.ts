@@ -31,11 +31,11 @@ test.describe("three seeded stores on one deployment", () => {
     });
   }
 
-  test("a verified custom domain serves its store; the same store via two hosts shares one identity", async ({ request }) => {
+  test("a verified custom domain serves its store and is not cacheable", async ({ request }) => {
     const custom = await request.get("http://localhost:3101/", { headers: { host: "shop.acme-sneakers.test" } });
     expect(custom.status()).toBe(200);
     expect(await custom.text()).toContain("Acme Sneakers");
-    expect(custom.headers()["vary"]).toContain("Host");
+    expect(custom.headers()["cache-control"]).toContain("no-store");
   });
 
   test("draft, suspended, unknown and spoofed hosts do not serve a store", async ({ request }) => {
