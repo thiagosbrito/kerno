@@ -1,0 +1,100 @@
+name: CI
+
+# Untrusted-PR safety: triggers are `pull_request` (fork PRs get no secrets and a
+# read-only token) and `push` to main. Never switch to `pull_request_target` or
+# `workflow_run` with checkout of PR code. No repository secrets are used here.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: "true"
+  TURBO_TELEMETRY_DISABLED: "1"
+
+jobs:
+  quality:
+    name: Quality (lint, typecheck, test, build, bundles, docs)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - run: corepack enable
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm test:bundles:self
+      - run: pnpm test:bundles
+      - run: pnpm docs:check
+      - name: No generated or modified tracked files
+        run: git diff --exit-code
+      - name: Whitespace check against base
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          EMPTY_TREE=4b825dc642cb6eb9a060e54bf8d69288fbee4904
+          case "$BASE" in
+            ""|0000000000000000000000000000000000000000) BASE="$EMPTY_TREE" ;;
+          esac
+          git cat-file -e "$BASE^{object}" 2>/dev/null || BASE="$EMPTY_TREE"
+          git diff --check "$BASE" HEAD
+
+  e2e:
+    name: Browser (Playwright)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: corepack enable
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
+  security:
+    name: Security (secret scan, dependency audit)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: corepack enable
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm test:secrets:self
+      - run: pnpm scan:secrets
+      - run: pnpm test:workflows:self
+      - run: pnpm check:workflows
+      - run: pnpm audit:deps
