@@ -1,6 +1,6 @@
 # Security steering
 
-Target OWASP ASVS 5.0 Level 2 and applicable API Top 10 risks. Maintain a requirement-to-control-to-test evidence matrix in the threat-model ticket. Record applicability and justified exceptions; never claim certification from a checklist. Security work starts in M0 and is a condition of every milestone.
+Target OWASP ASVS 5.0 Level 2 and applicable API Top 10 risks. Maintain the requirement-to-control-to-test evidence matrix in the [ASVS evidence map](../security/asvs-evidence-map.md) and the abuse cases in the [threat model](../security/threat-model.md); update both in the same change that alters a boundary or control. Record applicability and justified exceptions; never claim certification from a checklist. Security work starts in M0 and is a condition of every milestone.
 
 ## Authorization and isolation
 

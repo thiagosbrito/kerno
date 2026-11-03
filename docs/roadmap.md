@@ -2,9 +2,11 @@
 
 [Linear project](https://linear.app/thiagosbrito/project/kerno-ef4b1e3f582c/overview) owns live status, priorities, blockers and acceptance criteria. This index is a bootstrap snapshot, not a second status tracker. Read [AGENTS.md](../AGENTS.md) and [workflow](steering/workflow.md) before taking a ticket. High = P2 in Linear's numeric API (priority 2); Medium = priority 3. No deadlines are assigned.
 
-Milestone gates proceed M0 → M1 → M2 → M3 → M4 → M5 → M6. Native ticket blockers record specific prerequisites; milestone security and exit evidence also apply. Security work is continuous. This commit addresses the guidance ticket only; it does not complete the toolchain, CI or threat-model work in M0.
+Milestone gates proceed M0 → M1 → M2 → M3 → M4 → M5 → M6. Native ticket blockers record specific prerequisites; milestone security and exit evidence also apply. Security work is continuous. Linear is the source of truth for the status of every ticket listed here.
 
 ## M0 · Repository & Agent Foundation
+
+Security baseline: [threat model](security/threat-model.md) and [ASVS evidence map](security/asvs-evidence-map.md) define abuse cases, exclusions and per-milestone security exit evidence.
 
 | Ticket | Scope | Priority | Blocked by |
 | --- | --- | --- | --- |
