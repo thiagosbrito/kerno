@@ -11,6 +11,8 @@ alter default privileges in schema public revoke all on tables from anon, authen
 alter default privileges in schema public revoke all on sequences from anon, authenticated;
 alter default privileges in schema public revoke all on functions from anon, authenticated;
 -- PostgreSQL grants EXECUTE on new functions to PUBLIC; a per-schema revoke cannot remove that.
+-- Global (no IN SCHEMA): it also covers functions this role creates in any schema later, so every
+-- API-callable function needs an explicit GRANT.
 alter default privileges revoke execute on functions from public;
 
 create schema if not exists private;
@@ -218,11 +220,12 @@ returns void
 language plpgsql set search_path = ''
 as $$
 begin
-  if not exists (
-    select 1 from public.memberships m
+  -- FOR SHARE keeps a concurrent demotion/removal of the actor from slipping past this check.
+  perform 1 from public.memberships m
     where m.organization_id = org and m.user_id = actor
       and (m.role = 'owner' or (m.role = 'admin' and member_role in ('manager', 'staff')))
-  ) then
+    for share;
+  if not found then
     raise exception 'actor may not add this role' using errcode = '42501';
   end if;
   insert into public.memberships (organization_id, user_id, role, created_by)
@@ -282,6 +285,7 @@ create policy stores_delete on public.stores for delete to authenticated
 
 -- store_public_profiles: anyone reads active stores; members read their drafts; owner/admin write.
 -- The subselects on stores run under the caller's RLS, so they only see own-organization stores.
+-- Writes are refused while the store is suspended (the profile is part of what a takedown freezes).
 create policy profiles_public_select on public.store_public_profiles for select to anon, authenticated
   using (private.store_is_active(store_id));
 create policy profiles_member_select on public.store_public_profiles for select to authenticated
@@ -289,21 +293,21 @@ create policy profiles_member_select on public.store_public_profiles for select 
 create policy profiles_insert on public.store_public_profiles for insert to authenticated
   with check (exists (
     select 1 from public.stores s
-    where s.id = store_public_profiles.store_id and private.has_org_role(s.organization_id, array['owner', 'admin']::public.org_role[])
+    where s.id = store_public_profiles.store_id and s.status <> 'suspended' and private.has_org_role(s.organization_id, array['owner', 'admin']::public.org_role[])
   ));
 create policy profiles_update on public.store_public_profiles for update to authenticated
   using (exists (
     select 1 from public.stores s
-    where s.id = store_public_profiles.store_id and private.has_org_role(s.organization_id, array['owner', 'admin']::public.org_role[])
+    where s.id = store_public_profiles.store_id and s.status <> 'suspended' and private.has_org_role(s.organization_id, array['owner', 'admin']::public.org_role[])
   ))
   with check (exists (
     select 1 from public.stores s
-    where s.id = store_public_profiles.store_id and private.has_org_role(s.organization_id, array['owner', 'admin']::public.org_role[])
+    where s.id = store_public_profiles.store_id and s.status <> 'suspended' and private.has_org_role(s.organization_id, array['owner', 'admin']::public.org_role[])
   ));
 create policy profiles_delete on public.store_public_profiles for delete to authenticated
   using (exists (
     select 1 from public.stores s
-    where s.id = store_public_profiles.store_id and private.has_org_role(s.organization_id, array['owner']::public.org_role[])
+    where s.id = store_public_profiles.store_id and s.status <> 'suspended' and private.has_org_role(s.organization_id, array['owner']::public.org_role[])
   ));
 
 -- ---------------------------------------------------------------------------

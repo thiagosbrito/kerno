@@ -464,6 +464,12 @@ describe("public vs private store data and suspension", () => {
     // The takedown cannot be dodged by deleting the whole organization either.
     expect((await rejection(as(db, owner, `delete from public.organizations where id = '${ids.orgA}'`))).code).toBe(PERMISSION);
     expect(await count(service, "stores", `id = '${ids.storeA}' and slug = 'main-a' and status = 'suspended'`)).toBe(1);
+    // The public profile is frozen with the store.
+    for (const ctx of [owner, admin]) {
+      expect((await as(db, ctx, `update public.store_public_profiles set display_name = 'edited' where store_id = '${ids.storeA}'`)).affectedRows).toBe(0);
+    }
+    expect((await as(db, owner, `delete from public.store_public_profiles where store_id = '${ids.storeA}'`)).affectedRows).toBe(0);
+    expect(await count(service, "store_public_profiles", `store_id = '${ids.storeA}' and display_name = 'Main Store'`)).toBe(1);
     // The platform can lift it again.
     await as(db, service, `update public.stores set status = 'active' where id = '${ids.storeA}'`);
     expect(await count(anon, "store_public_profiles", `store_id = '${ids.storeA}'`)).toBe(1);
@@ -508,6 +514,18 @@ describe("review round 1 regressions", () => {
     }).toEqual(EXPECTED_API_PRIVILEGES);
   });
 
+  it("has no column-level grants beyond the pinned INSERT/UPDATE ones (no column SELECT or REFERENCES)", async () => {
+    const { rows } = await db.query<{ entry: string }>(`
+      select r.rolname || '.' || c.relname || '.' || a.attname || ':' || x.privilege_type as entry
+      from pg_attribute a
+      join pg_class c on c.oid = a.attrelid
+      join pg_namespace n on n.oid = c.relnamespace and n.nspname = 'public'
+      cross join lateral aclexplode(a.attacl) x
+      join pg_roles r on r.oid = x.grantee
+      where a.attacl is not null and r.rolname in ('anon', 'authenticated')`);
+    expect(rows.map((r) => r.entry).sort()).toEqual([...EXPECTED_API_PRIVILEGES.columns].sort());
+  });
+
   it("treats a key change on the last owner as a removal", async () => {
     for (const sql of [
       `update public.memberships set organization_id = '${ids.orgB}' where user_id = '${ids.ownerA}'`,
@@ -517,10 +535,13 @@ describe("review round 1 regressions", () => {
     }
   });
 
-  it("an upsert cannot overwrite an owner row or touch another tenant", async () => {
-    const upsert = (org: string, user: string) =>
-      `insert into public.stores (id, organization_id, slug, name) values ('${ids.storeB}', '${org}', 'x-${user.slice(-2)}', 'x') on conflict (id) do update set name = 'pwned'`;
-    expect((await rejection(as(db, owner, upsert(ids.orgA, ids.ownerA)))).code).toBe(PERMISSION);
+  it("an upsert (ON CONFLICT DO UPDATE) cannot overwrite another tenant's store", async () => {
+    // slug 'main-b' belongs to tenant B; the conflict path would UPDATE B's row.
+    const error = await rejection(
+      as(db, owner, `insert into public.stores (organization_id, slug, name) values ('${ids.orgA}', 'main-b', 'pwned') on conflict (slug) do update set name = 'pwned'`),
+    );
+    expect(error.code).toBe(PERMISSION);
+    expect(error.message).toContain("row-level security");
     expect(await count(service, "stores", `id = '${ids.storeB}' and name = 'Main Store'`)).toBe(1);
   });
 
