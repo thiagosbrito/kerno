@@ -23,4 +23,4 @@ Keep the exemptions only for the exact pinned versions listed in `pnpm-workspace
 - Versions in the lockfile are exact, so the exemption cannot admit a different, unreviewed release.
 - Residual risk: a malicious release published inside the window would not have been quarantined. The lockfile integrity hashes were created at install time on 2026-11-03; no independent review of those versions was performed.
 - Rollback: delete the exclusion list; if install fails, the version is still inside the window, so wait or pin an older version.
-- The follow-up removal and the CI frozen-install check (THI-62) are still open.
+- The CI frozen-install check was added by THI-62; the follow-up removal of the exemptions is still open.
