@@ -17,5 +17,20 @@ export default async function Home() {
     if (profile.status === "unavailable") throw new Error("store profile unavailable");
     notFound();
   }
-  return <PageShell title={profile.profile.displayName} />;
+  const { displayName, defaultLocale, currency, homepageMode } = profile.profile;
+  // POC (THI-67): render each store's own public configuration so isolation is observable.
+  return (
+    <div lang={defaultLocale} data-homepage-mode={homepageMode}>
+      <PageShell title={displayName}>
+        <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+          <dt>Language</dt>
+          <dd data-testid="locale">{defaultLocale}</dd>
+          <dt>Currency</dt>
+          <dd data-testid="currency">{currency}</dd>
+          <dt>Homepage</dt>
+          <dd data-testid="homepage-mode">{homepageMode}</dd>
+        </dl>
+      </PageShell>
+    </div>
+  );
 }

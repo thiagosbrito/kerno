@@ -18,6 +18,7 @@ concurrency:
 env:
   CI: "true"
   TURBO_TELEMETRY_DISABLED: "1"
+  NEXT_TELEMETRY_DISABLED: "1"
 
 jobs:
   quality:
@@ -84,6 +85,14 @@ jobs:
           echo "::add-mask::$SERVICE"
           KERNO_REQUIRE_STACK_TESTS=1 KERNO_TEST_SUPABASE_URL=http://127.0.0.1:54321 KERNO_TEST_SUPABASE_ANON_KEY="$ANON" pnpm --filter @kerno/server test
           E2E_SEEDED_STORES=1 E2E_MERCHANT_AUTH=1 E2E_SUPABASE_ANON_KEY="$ANON" E2E_SUPABASE_SERVICE_ROLE_KEY="$SERVICE" pnpm test:e2e
+      # `next dev` never caches pages, so the cache-header assertions only mean something against a
+      # production build (THI-67). Runs after the dev-server run and relies on the seed being untouched:
+      # no dev-run spec may change store data (add `pnpm db:reset` here if one ever does). Storefront only.
+      - name: Three-store isolation against a production build
+        run: |
+          ANON=$(pnpm exec supabase status -o env | grep '^ANON_KEY=' | cut -d= -f2 | tr -d '"')
+          echo "::add-mask::$ANON"
+          E2E_PRODUCTION_SERVER=1 E2E_SEEDED_STORES=1 E2E_SUPABASE_ANON_KEY="$ANON" pnpm test:e2e e2e/three-store-isolation.spec.ts
       - if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

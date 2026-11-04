@@ -16,10 +16,26 @@ const env = {
   PLATFORM_DOMAIN: "localhost",
 };
 
+// E2E_PRODUCTION_SERVER=1 serves the apps from `next build && next start` instead of `next dev`.
+// `next dev` never caches pages, so only a production server can show that a page is not statically
+// cached or shared between hosts (THI-67). NEXT_PUBLIC_* values are inlined at build time, which is
+// why the same env is passed to the build step.
+const production = process.env.E2E_PRODUCTION_SERVER === "1";
+const serve = (app: string, port: number) =>
+  production
+    ? `pnpm --filter @kerno/${app} exec next build && pnpm --filter @kerno/${app} exec next start --port ${port}`
+    : `pnpm --filter @kerno/${app} exec next dev --port ${port}`;
+
+// The production run exists for the storefront's cache behaviour, so it skips the admin app (a second
+// production build the storefront-only specs never use). Run only e2e/three-store-isolation.spec.ts with it.
+const servers = [
+  { command: serve("admin", 3100), url: ADMIN, env, reuseExistingServer: false, timeout: 120_000 },
+  { command: serve("storefront", 3101), port: 3101, env, reuseExistingServer: false, timeout: production ? 300_000 : 120_000 },
+];
+
 export default defineConfig({
   testDir: "e2e",
-  webServer: [
-    { command: "pnpm --filter @kerno/admin exec next dev --port 3100", url: ADMIN, env, reuseExistingServer: false, timeout: 120_000 },
-    { command: "pnpm --filter @kerno/storefront exec next dev --port 3101", port: 3101, env, reuseExistingServer: false, timeout: 120_000 },
-  ],
+  // Production mode starts no admin app, so only the storefront-only spec may run.
+  testMatch: production ? /three-store-isolation\.spec\.ts$/ : undefined,
+  webServer: production ? servers.slice(1) : servers,
 });
