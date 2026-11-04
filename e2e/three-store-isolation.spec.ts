@@ -50,6 +50,13 @@ test.describe("three-store isolation", () => {
     for (const url of ["/?store=acme-sneakers", "/?storeId=20000000-0000-4000-8000-0000000000e1", "/acme-sneakers", "/..%2Facme-sneakers", "/%2e%2e/acme-plants"]) {
       const res = await request.get(base + url, { headers: asBooks });
       const body = await res.text();
+      // Query strings are ignored, so the host's own store still renders; paths have no route (404).
+      if (url.startsWith("/?")) {
+        expect(res.status(), url).toBe(200);
+        expect(body, url).toContain("Acme Livros");
+      } else {
+        expect(res.status(), url).toBe(404);
+      }
       expect(body, url).not.toContain("Acme Sneakers");
       expect(body, url).not.toContain("Acme Rośliny");
     }
@@ -59,11 +66,19 @@ test.describe("three-store isolation", () => {
     }
   });
 
-  test("media paths: the image optimizer and static media routes are gated by host", async ({ request }) => {
-    // No media exists before THI-70; the optimizer must still not be an unauthenticated side door.
+  test("media paths: static files and the image optimizer are gated by host", async ({ request }) => {
+    // No tenant media exists before THI-70; public files and the optimizer must still not be an
+    // ungated side door. The proxy's own plain-text 404 distinguishes "gated" from "file not found".
+    const asHost = (host: string) => ({ host: `${host}:${PORT}` });
+    const ok = await request.get(`http://localhost:${PORT}/kerno-mark.svg`, { headers: asHost("acme-books.localhost") });
+    expect(ok.status()).toBe(200); // positive control: the file exists and an active host may read it
     for (const host of ["nobody.localhost", "acme-draft.localhost", "acme-suspended.localhost"]) {
-      const res = await request.get(`http://localhost:${PORT}/_next/image?url=%2Ffavicon.ico&w=64&q=75`, { headers: { host: `${host}:${PORT}` } });
-      expect(res.status(), host).toBe(404);
+      for (const path of ["/kerno-mark.svg", "/_next/image?url=%2Fkerno-mark.svg&w=64&q=75"]) {
+        const res = await request.get(`http://localhost:${PORT}${path}`, { headers: asHost(host) });
+        expect(res.status(), `${host}${path}`).toBe(404);
+        expect(await res.text(), `${host}${path}`).toBe("Not found");
+        expect(res.headers()["cache-control"]).toBe("no-store");
+      }
     }
   });
 });

@@ -39,15 +39,11 @@ beforeEach(async () => {
         ('${store(t)}', 'Main Store ${t}', '${["en", "pt-BR", "pl"][Number(t) - 1]}', '${["USD", "BRL", "PLN"][Number(t) - 1]}', 'landing'),
         ('${draftStore(t)}', 'Draft ${t}', 'en', 'USD', 'landing');`,
     ).join("\n")}
-    alter table public.audit_events disable trigger audit_events_no_truncate;
-    truncate public.audit_events;
-    alter table public.audit_events enable trigger audit_events_no_truncate;
   `);
   for (const t of T) {
     const domain = (await as<{ domain_id: string }>(db, service, "select * from public.claim_domain($1, $2, $3)", [store(t), host(t), "kerno.app"])).rows[0]?.domain_id;
     await as(db, service, "select public.confirm_domain($1, true)", [domain]);
   }
-  await db.exec("alter table public.audit_events disable trigger audit_events_no_truncate; truncate public.audit_events; alter table public.audit_events enable trigger audit_events_no_truncate;");
 });
 
 const rows = async (ctx: Context, sql: string, params: unknown[] = []) => (await as(db, ctx, sql, params)).rows;
@@ -60,7 +56,9 @@ describe("each tenant sees exactly its own rows", () => {
       expect((await rows(ctx, "select id from public.stores order by id")).map((r) => r.id)).toEqual([store(t), draftStore(t)]);
       expect((await rows(ctx, "select organization_id from public.memberships")).every((r) => r.organization_id === org(t))).toBe(true);
       expect((await rows(ctx, "select store_id from public.store_domains")).map((r) => r.store_id)).toEqual([store(t)]);
+      // Non-empty on purpose: the fixture's own changes were audited, so an empty result would mean a broken policy.
       const audit = await rows(ctx, "select organization_id from public.audit_events");
+      expect(audit.length).toBeGreaterThan(0);
       expect(audit.every((r) => r.organization_id === org(t))).toBe(true);
     });
   }
@@ -75,6 +73,8 @@ describe("cross-tenant reads fail for every ordered pair", () => {
         expect(await rows(ctx, "select 1 from public.memberships where organization_id = $1 or user_id = $2", [org(target), owner(target)])).toEqual([]);
         expect(await rows(ctx, "select 1 from public.store_domains where store_id = $1 or hostname = $2", [store(target), host(target)])).toEqual([]);
         expect(await rows(ctx, "select 1 from public.audit_events where organization_id = $1", [org(target)])).toEqual([]);
+        // Control: the rows being hidden really exist.
+        expect((await rows(service, "select 1 from public.audit_events where organization_id = $1", [org(target)])).length).toBeGreaterThan(0);
         // Private fields never reach another tenant; the draft profile is invisible too.
         expect(await rows(ctx, "select 1 from public.store_public_profiles where store_id = $1", [draftStore(target)])).toEqual([]);
       }
@@ -98,12 +98,14 @@ describe("cross-tenant writes fail for every ordered pair", () => {
       await expect(
         rejection(as(db, ctx, "insert into public.stores (organization_id, slug, name) values ($1, 'forged', 'x')", [org(target)])),
       ).resolves.toMatchObject({ code: PERMISSION });
+      // The target's draft profile is removed first so a primary-key clash cannot mask a missing RLS check.
+      await as(db, service, "delete from public.store_public_profiles where store_id = $1", [draftStore(target)]);
       await expect(
         rejection(as(db, ctx, "insert into public.store_public_profiles (store_id, display_name, default_locale, currency) values ($1, 'x', 'en', 'USD')", [draftStore(target)])),
-      ).resolves.toBeDefined();
+      ).resolves.toMatchObject({ code: PERMISSION });
       await expect(
         rejection(as(db, ctx, "update public.stores set organization_id = $1 where id = $2", [org(target), store(viewer)])),
-      ).resolves.toBeDefined();
+      ).resolves.toMatchObject({ code: PERMISSION });
       // Server-only entry points are not callable by an authenticated merchant.
       await expect(
         rejection(as(db, ctx, "select public.add_member($1, $2, 'owner', $3)", [org(target), owner(viewer), owner(viewer)])),
@@ -142,9 +144,10 @@ describe("public (anonymous) surface across three stores", () => {
     expect(await rows(anon, "select 1 from public.resolve_store_by_host($1)", [host("3")])).toHaveLength(1);
   });
 
-  it("cannot read or write any tenant table", async () => {
+  it("cannot read or write any tenant table (reads and writes both denied)", async () => {
     for (const table of ["organizations", "stores", "memberships", "store_domains", "audit_events"]) {
       await expect(rejection(as(db, anon, `select 1 from public.${table}`))).resolves.toMatchObject({ code: PERMISSION });
+      await expect(rejection(as(db, anon, `delete from public.${table}`))).resolves.toMatchObject({ code: PERMISSION });
     }
   });
 });
@@ -152,19 +155,34 @@ describe("public (anonymous) surface across three stores", () => {
 describe("audit trails are per tenant", () => {
   it("a change in tenant 2 is visible to its owner only", async () => {
     await as(db, asOwner("2"), "update public.organizations set name = 'Renamed' where id = $1", [org("2")]);
-    expect((await rows(asOwner("2"), "select 1 from public.audit_events where action like '%organization%' or true")).length).toBeGreaterThan(0);
+    const own = await rows(asOwner("2"), "select organization_id from public.audit_events");
+    expect(own.length).toBeGreaterThan(0);
+    expect(own.every((r) => r.organization_id === org("2"))).toBe(true);
     for (const t of ["1", "3"] as const) expect(await rows(asOwner(t), "select 1 from public.audit_events where organization_id = $1", [org("2")])).toEqual([]);
   });
 });
 
 describe("media paths (storage) are not yet exposed", () => {
-  // Media upload and delivery arrive with THI-70. Until then no migration may create a bucket, a
-  // storage policy or a public path, so there is no cross-tenant object path to leak. THI-70 must
-  // replace this test with per-tenant object-path policy tests across all three tenants.
-  it("has no storage buckets, policies or object paths in any migration", () => {
-    for (const file of migrationFiles()) {
-      const sql = readFileSync(join(migrationsDir, file), "utf8").replace(/--.*$/gm, "");
-      expect(sql, file).not.toMatch(/\bstorage\.(buckets|objects)\b|create\s+policy[^;]+\bon\s+storage\b/i);
+  // Media upload and delivery arrive with THI-70. Until then no migration, seed or local config may
+  // create a bucket, a storage policy or a public path, so there is no cross-tenant object path to
+  // leak. THI-70 must replace this tripwire with per-tenant object-path policy tests for all three tenants.
+  const strip = (sql: string) => sql.replace(/--.*$/gm, "").replace(/"/g, "");
+  const STORAGE = /\bstorage\s*\.\s*(buckets|objects)\b|\bon\s+storage\b/i;
+
+  it("has no storage buckets, policies or object paths in any migration or the seed", () => {
+    const sqlDir = join(migrationsDir, "..");
+    const files = [...migrationFiles().map((f) => join(migrationsDir, f)), join(sqlDir, "seed.sql")];
+    for (const file of files) expect(strip(readFileSync(file, "utf8")), file).not.toMatch(STORAGE);
+  });
+
+  it("the tripwire matches quoted and spaced spellings", () => {
+    for (const sql of ['create policy p on "storage"."objects" for select using (true);', "insert into storage . buckets (id) values ('x');"]) {
+      expect(strip(sql)).toMatch(STORAGE);
     }
+  });
+
+  it("declares no local storage bucket in supabase/config.toml", () => {
+    const config = readFileSync(join(migrationsDir, "..", "config.toml"), "utf8");
+    expect(config.replace(/^\s*#.*$/gm, "")).not.toMatch(/^\s*\[storage\.buckets\./m);
   });
 });

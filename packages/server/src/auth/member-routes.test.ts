@@ -150,6 +150,32 @@ describe("IDOR", () => {
     expect((await change("staff", OWNER_B, ORG_B)).status).toBe(404);
   });
 
+  it("keeps three tenants apart: every owner is denied on every other organization and nothing is written", async () => {
+    const ORG_C = "10000000-0000-4000-8000-00000000000c";
+    const OWNER_C = "00000000-0000-4000-8000-0000000000d1";
+    const STAFF_C = "00000000-0000-4000-8000-0000000000d2";
+    members.set(ORG_C, OWNER_C, "owner");
+    members.set(ORG_C, STAFF_C, "staff");
+    const tenants = [
+      { org: ORG_A, owner: OWNER, member: STAFF },
+      { org: ORG_B, owner: OWNER_B, member: OWNER_B },
+      { org: ORG_C, owner: OWNER_C, member: STAFF_C },
+    ];
+    for (const actor of tenants) {
+      for (const target of tenants.filter((t) => t !== actor)) {
+        session = as(actor.owner);
+        expect((await change("staff", target.member, target.org)).status, `${actor.org} -> ${target.org}`).toBe(404);
+        expect((await handleMemberRemoval(del(), { organizationId: target.org, userId: target.member }, deps())).status).toBe(404);
+      }
+    }
+    expect(members.writes).toEqual([]);
+    expect(audits).toEqual([]);
+    // Control: the same owner can act inside its own organization.
+    session = as(OWNER_C);
+    expect((await change("manager", STAFF_C, ORG_C)).status).toBe(200);
+    expect(members.writes).toEqual([`role:${ORG_C}:${STAFF_C}:manager`]);
+  });
+
   it("ignores a client-submitted organization id in the body (strict schema)", async () => {
     const res = await change(undefined, STAFF, ORG_A, patch(undefined, { origin: ORIGIN }, JSON.stringify({ role: "staff", organization_id: ORG_B })));
     expect(res.status).toBe(400);
