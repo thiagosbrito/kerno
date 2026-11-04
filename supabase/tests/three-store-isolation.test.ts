@@ -176,8 +176,13 @@ describe("media paths (storage) are not yet exposed", () => {
   // One pass, so whichever comment style starts first wins (a `/*` inside a `--` comment must not open a block).
   const strip = (sql: string) => sql.replace(/\/\*[\s\S]*?\*\/|--[^\n]*/g, "").replace(/"/g, "");
   // Qualified names and `on storage` apply everywhere (migrations and seed). The looser arms only make
-  // sense in DDL: a search_path that includes storage (same line only, so it cannot run on into a function
-  // body) and unqualified object/bucket targets (any statement form, so a multi-line search_path cannot hide them). They are kept out of the seed, whose data may say "on objects".
+  // sense in DDL, so they are kept out of the seed, whose data may say "on objects":
+  //  - a search_path that includes storage (same line only, so it cannot run on into a function body);
+  //  - unqualified object/bucket targets in any statement form, which is what actually catches a
+  //    multi-line search_path followed by `insert into buckets`.
+  // False positives fail loudly with the migration's file name. If a legitimate migration trips this
+  // (a string or column that says "objects"/"buckets"), qualify or rename it rather than weakening the
+  // regex. THI-70 deletes this whole block when real per-tenant storage policy tests replace it.
   const QUALIFIED = /\bstorage\s*\.\s*(buckets|objects)\b|\bon\s+storage\b/i;
   const DDL_ONLY = /\bsearch_path\s*(=|to)[^;\n]*\bstorage\b|\b(on|into|update|from|table)\s+(objects|buckets)\b|set_config\s*\(\s*'search_path'[^)]*\bstorage\b/i;
   const migrationHit = (sql: string) => QUALIFIED.test(strip(sql)) || DDL_ONLY.test(strip(sql));
