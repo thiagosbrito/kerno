@@ -6,8 +6,8 @@ Workflow: `.github/workflows/ci.yml`. It runs on `pull_request` and pushes to `m
 
 | CI job | Local equivalent |
 | --- | --- |
-| Quality | `pnpm install --frozen-lockfile`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:bundles:self`, `pnpm test:bundles`, `pnpm docs:check`, `git diff --check <base> HEAD` (CI) / `git diff --check` (local, working tree), `git diff --exit-code` |
-| Browser (Playwright) | `pnpm exec playwright install chromium` once, then `pnpm test:e2e` |
+| Quality | `pnpm install --frozen-lockfile`, `pnpm lint` (workspace packages plus `e2e/` and `playwright.config.ts`), `pnpm typecheck`, `pnpm test`, `pnpm test:bundles:self`, `pnpm test:bundles`, `pnpm docs:check`, `git diff --check <base> HEAD` (CI) / `git diff --check` (local, working tree), `git diff --exit-code` |
+| Browser (Playwright) | `pnpm exec playwright install chromium` once, then `pnpm test:e2e`; CI also re-runs `e2e/three-store-isolation.spec.ts` with `E2E_PRODUCTION_SERVER=1` against `next build && next start` |
 | Security | `pnpm test:secrets:self`, `pnpm scan:secrets`, `pnpm test:workflows:self`, `pnpm check:workflows`, `pnpm audit:deps` |
 
 `scripts/scan_secrets.py` is an offline pattern scan of tracked files (private keys, cloud/provider tokens, JWT-shaped values, credential-like assignments). It prints file, line and rule only, never the value. Placeholder and sentinel values are ignored; a line may carry `secret-scan: allow` for a documented fixture, but the marker is honoured only in `scripts/test_*.py`; anywhere else it is ignored and the finding stands. Quoted keys (`"API_KEY": "..."`) and Supabase `sb_secret_` keys are detected, and a placeholder on a line does not hide a later real value. It complements, not replaces, GitHub secret scanning with push protection, which is enabled for this public repository. A real finding means rotate the credential first, then remove it.

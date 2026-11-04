@@ -29,7 +29,7 @@ test.describe("three-store isolation", () => {
   }
 
   test("concurrent interleaved requests never receive another store's page", async ({ request }) => {
-    const jobs = Array.from({ length: 90 }, (_, i) => stores[i % 3]!);
+    const jobs = Array.from({ length: 30 }, () => stores).flat(); // 90 requests, interleaved a,b,c,a,b,c...
     const bodies = await Promise.all(
       jobs.map(async (s) => {
         const res = await request.get(`http://localhost:${PORT}/`, { headers: { host: `${s.host}:${PORT}` } });
@@ -38,6 +38,7 @@ test.describe("three-store isolation", () => {
     );
     for (const { s, status, cache, body } of bodies) {
       expect(status).toBe(200);
+      expect(cache).toMatch(/no-store|private/); // explicit, not merely "not public"
       expect(cache).not.toMatch(/public|s-maxage|max-age=[1-9]/);
       expect(body).toContain(s.name);
       for (const o of stores.filter((x) => x !== s)) expect(body).not.toContain(o.name);

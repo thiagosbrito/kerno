@@ -16,6 +16,11 @@ test.describe("merchant authentication and server authorization", () => {
   const run = Math.random().toString(36).slice(2, 10);
   const email = (who: string) => `${who}-${run}@auth-e2e.test`;
   const users: Record<string, string> = {};
+  const uid = (who: string): string => {
+    const id = users[who];
+    if (id === undefined) throw new Error(`fixture user ${who} was not created`);
+    return id;
+  };
   let orgId = "";
   let otherOrgId = "";
 
@@ -67,7 +72,7 @@ test.describe("merchant authentication and server authorization", () => {
   test("unauthenticated pages redirect to login and API calls get 401", async ({ page, request }) => {
     await page.goto(ADMIN);
     await expect(page).toHaveURL(/\/login\?next=%2F$/);
-    const res = await request.patch(api(orgId, users.staff!), { headers: sameOrigin, data: { role: "manager" } });
+    const res = await request.patch(api(orgId, uid("staff")), { headers: sameOrigin, data: { role: "manager" } });
     expect(res.status()).toBe(401);
     expect(res.headers()["cache-control"]).toBe("no-store");
   });
@@ -99,33 +104,33 @@ test.describe("merchant authentication and server authorization", () => {
     await signInOk(page, "owner");
     await expect(page.getByRole("heading", { name: "KERNO Admin" })).toBeVisible();
     for (const h of [{ origin: "https://evil.test" }, {}, { "sec-fetch-site": "cross-site" }]) {
-      const res = await page.request.patch(api(orgId, users.staff!), { headers: { "content-type": "application/json", ...h }, data: { role: "manager" } });
+      const res = await page.request.patch(api(orgId, uid("staff")), { headers: { "content-type": "application/json", ...h }, data: { role: "manager" } });
       expect(res.status(), JSON.stringify(h)).toBe(403);
     }
   });
 
   test("IDOR and escalation: another tenant's organization is invisible and bodies cannot carry tenant ids", async ({ page }) => {
     await signInOk(page, "owner");
-    const other = await page.request.patch(api(otherOrgId, users.outsider!), { headers: sameOrigin, data: { role: "staff" } });
-    const missing = await page.request.patch(api("10000000-0000-4000-8000-0000000000ff", users.outsider!), { headers: sameOrigin, data: { role: "staff" } });
+    const other = await page.request.patch(api(otherOrgId, uid("outsider")), { headers: sameOrigin, data: { role: "staff" } });
+    const missing = await page.request.patch(api("10000000-0000-4000-8000-0000000000ff", uid("outsider")), { headers: sameOrigin, data: { role: "staff" } });
     expect(other.status()).toBe(404);
     expect(await other.text()).toBe(await missing.text());
-    const forged = await page.request.patch(api(orgId, users.staff!), { headers: sameOrigin, data: { role: "manager", organization_id: otherOrgId } });
+    const forged = await page.request.patch(api(orgId, uid("staff")), { headers: sameOrigin, data: { role: "manager", organization_id: otherOrgId } });
     expect(forged.status()).toBe(400);
   });
 
   test("an owner can change a role; a staff member cannot escalate and the attempt is audited", async ({ browser, page, request }) => {
     await signInOk(page, "owner");
-    const ok = await page.request.patch(api(orgId, users.staff!), { headers: sameOrigin, data: { role: "manager" } });
+    const ok = await page.request.patch(api(orgId, uid("staff")), { headers: sameOrigin, data: { role: "manager" } });
     expect(ok.status()).toBe(200);
-    const back = await page.request.patch(api(orgId, users.staff!), { headers: sameOrigin, data: { role: "staff" } });
+    const back = await page.request.patch(api(orgId, uid("staff")), { headers: sameOrigin, data: { role: "staff" } });
     expect(back.status()).toBe(200);
 
     const staffContext = await browser.newContext();
     const staffPage = await staffContext.newPage();
     await signInOk(staffPage, "staff");
     await expect(staffPage.getByText(`Auth E2E ${run} · staff`)).toBeVisible();
-    const denied = await staffPage.request.patch(api(orgId, users.staff!), { headers: sameOrigin, data: { role: "owner" } });
+    const denied = await staffPage.request.patch(api(orgId, uid("staff")), { headers: sameOrigin, data: { role: "owner" } });
     expect(denied.status()).toBe(403);
     await staffContext.close();
 
@@ -149,12 +154,12 @@ test.describe("merchant authentication and server authorization", () => {
     await rpc(request, "add_member", { org: orgId, member_user_id: users.admin, member_role: "admin", actor: users.owner });
     await signInOk(page, "admin");
     await expect(page.getByText(`Auth E2E ${run} · admin`)).toBeVisible();
-    const before = await page.request.patch(api(orgId, users.staff!), { headers: sameOrigin, data: { role: "manager" } });
+    const before = await page.request.patch(api(orgId, uid("staff")), { headers: sameOrigin, data: { role: "manager" } });
     expect(before.status()).toBe(200);
     // Revoke the membership as the platform would; the session and its token stay valid.
     const del = await request.delete(`${SUPABASE}/rest/v1/memberships?organization_id=eq.${orgId}&user_id=eq.${users.admin}`, { headers });
     expect(del.status()).toBeLessThan(300);
-    const after = await page.request.patch(api(orgId, users.staff!), { headers: sameOrigin, data: { role: "staff" } });
+    const after = await page.request.patch(api(orgId, uid("staff")), { headers: sameOrigin, data: { role: "staff" } });
     expect(after.status()).toBe(404);
     await page.goto(ADMIN);
     await expect(page.getByText("You are not a member of any organization.")).toBeVisible();
@@ -164,14 +169,14 @@ test.describe("merchant authentication and server authorization", () => {
     await signInOk(page, "outsider");
     await expect(page.getByText(`Other ${run} · owner`)).toBeVisible();
     const stolen = (await page.context().cookies()).filter((c) => c.name.startsWith("sb-")).map((c) => `${c.name}=${c.value}`).join("; ");
-    const live = await request.patch(api(otherOrgId, users.outsider!), { headers: { ...sameOrigin, cookie: stolen }, data: { role: "owner" } });
+    const live = await request.patch(api(otherOrgId, uid("outsider")), { headers: { ...sameOrigin, cookie: stolen }, data: { role: "owner" } });
     expect(live.status()).toBe(200);
 
     await page.getByRole("button", { name: "Sign out" }).click();
     await expect(page).toHaveURL(/\/login/);
     expect((await page.context().cookies()).filter((c) => c.name.startsWith("sb-"))).toEqual([]);
 
-    const replay = await request.patch(api(otherOrgId, users.outsider!), { headers: { ...sameOrigin, cookie: stolen }, data: { role: "owner" } });
+    const replay = await request.patch(api(otherOrgId, uid("outsider")), { headers: { ...sameOrigin, cookie: stolen }, data: { role: "owner" } });
     expect(replay.status()).toBe(401);
   });
 });
