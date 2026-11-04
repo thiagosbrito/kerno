@@ -175,13 +175,18 @@ describe("media paths (storage) are not yet exposed", () => {
   // leak. THI-70 must replace this tripwire with per-tenant object-path policy tests for all three tenants.
   // One pass, so whichever comment style starts first wins (a `/*` inside a `--` comment must not open a block).
   const strip = (sql: string) => sql.replace(/\/\*[\s\S]*?\*\/|--[^\n]*/g, "").replace(/"/g, "");
-  // Qualified names, `on storage`, a search_path that includes storage, and unqualified object/bucket targets.
-  const STORAGE = /\bstorage\s*\.\s*(buckets|objects)\b|\bon\s+storage\b|search_path[^;]*\bstorage\b|\bon\s+(objects|buckets)\b/i;
+  // Qualified names and `on storage` apply everywhere (migrations and seed). The looser arms only make
+  // sense in DDL: a search_path that includes storage (same line only, so it cannot run on into a function
+  // body) and unqualified object/bucket targets. They are kept out of the seed, whose data may say "on objects".
+  const QUALIFIED = /\bstorage\s*\.\s*(buckets|objects)\b|\bon\s+storage\b/i;
+  const DDL_ONLY = /\bsearch_path\s*(=|to)[^;\n]*\bstorage\b|\bon\s+(objects|buckets)\b/i;
+  const migrationHit = (sql: string) => QUALIFIED.test(strip(sql)) || DDL_ONLY.test(strip(sql));
+  const seedHit = (sql: string) => QUALIFIED.test(strip(sql));
 
   it("has no storage buckets, policies or object paths in any migration or the seed", () => {
     const sqlDir = join(migrationsDir, "..");
-    const files = [...migrationFiles().map((f) => join(migrationsDir, f)), join(sqlDir, "seed.sql")];
-    for (const file of files) expect(strip(readFileSync(file, "utf8")), file).not.toMatch(STORAGE);
+    for (const f of migrationFiles()) expect(migrationHit(readFileSync(join(migrationsDir, f), "utf8")), f).toBe(false);
+    expect(seedHit(readFileSync(join(sqlDir, "seed.sql"), "utf8")), "seed.sql").toBe(false);
   });
 
   it("the tripwire matches quoted, spaced, search_path and unqualified spellings, and ignores comments", () => {
@@ -190,13 +195,20 @@ describe("media paths (storage) are not yet exposed", () => {
       "insert into storage . buckets (id) values ('x');",
       "set search_path = storage; create policy p on objects for select using (true);",
       "create policy p on /* x */ storage.objects using (true);",
+      // A `/*` inside a line comment must not swallow the real statement that follows it.
+      "-- skips /_next/*\ncreate policy p on storage.objects using (true);\n-- runs every */5 minutes\n",
     ]) {
-      expect(strip(sql), sql).toMatch(STORAGE);
+      expect(migrationHit(sql), sql).toBe(true);
     }
-    expect(strip("/* storage.objects */ -- on storage\nselect 1;")).not.toMatch(STORAGE);
-    // A `/*` inside a line comment must not swallow the real statement that follows it.
-    const sneaky = "-- skips /_next/*\ncreate policy p on storage.objects using (true);\n-- runs every */5 minutes\n";
-    expect(strip(sneaky)).toMatch(STORAGE);
+    expect(migrationHit("/* storage.objects */ -- on storage\nselect 1;")).toBe(false);
+    expect(seedHit("insert into storage.buckets (id) values ('x');")).toBe(true);
+  });
+
+  it("does not fire on look-alikes: seed prose, a function body that merely mentions storage, other schemas", () => {
+    expect(seedHit("insert into public.products (name) values ('Hooks for hanging things on objects');")).toBe(false);
+    const definer = "create function f() returns void language sql set search_path = ''\nas $$ select 'cold storage' $$;\ncreate policy p on public.objects using (true);";
+    expect(migrationHit(definer)).toBe(false);
+    expect(migrationHit("create table public.storage_quota (id int);")).toBe(false);
   });
 
   it("declares no local storage bucket in supabase/config.toml", () => {
