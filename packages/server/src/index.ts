@@ -9,3 +9,4 @@ export function getServerEnv(): ServerEnv {
   return cached;
 }
 export * from "./tenancy";
+export * from "./auth";

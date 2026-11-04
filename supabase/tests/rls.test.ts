@@ -53,6 +53,7 @@ const EXPECTED_API_PRIVILEGES = {
   ],
   tables: [
     "anon.store_public_profiles:SELECT",
+    "authenticated.audit_events:SELECT",
     "authenticated.memberships:DELETE",
     "authenticated.memberships:SELECT",
     "authenticated.organizations:DELETE",
@@ -90,7 +91,7 @@ describe("catalog: deny by default", () => {
       from pg_class c join pg_namespace n on n.oid = c.relnamespace
       where n.nspname = 'public' and c.relkind in ('r', 'p', 'v', 'm', 'f')`);
     expect(rows.map((r) => r.relname).sort()).toEqual(
-      ["memberships", "organizations", "store_domains", "store_public_profiles", "stores"],
+      ["audit_events", "memberships", "organizations", "store_domains", "store_public_profiles", "stores"],
     );
     for (const r of rows) {
       expect(r.rls, `${r.relname} must have RLS`).toBe(true);
@@ -124,6 +125,7 @@ describe("catalog: deny by default", () => {
       where n.nspname in ('public', 'private') and p.prosecdef order by 1`);
     // Reviewed in the migration; adding to this list needs a justification there.
     expect(definers.rows.map((r) => r.fn)).toEqual([
+      "private.audit_row_change",
       "private.has_org_role",
       "private.is_org_member",
       "private.protect_last_owner",

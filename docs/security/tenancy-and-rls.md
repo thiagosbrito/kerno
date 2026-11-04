@@ -43,11 +43,11 @@ Managers handle day-to-day operations (catalog, stock, orders) but not store con
 
 ## Service role
 
-`service_role` keeps Supabase's `BYPASSRLS`, so it ignores every policy above. It must stay server-only: `SUPABASE_SERVICE_ROLE_KEY` is parsed only by the server schema in `@kerno/contracts`, `pnpm test:bundles` fails if the name or value reaches a client bundle, and `supabase/tests/service-role-boundary.test.ts` fails if client-reachable source references it. Any server code using it must perform an equivalent explicit authorization check (AC-3); no such code exists yet.
+`service_role` keeps Supabase's `BYPASSRLS`, so it ignores every policy above. It must stay server-only: `SUPABASE_SERVICE_ROLE_KEY` is parsed only by the server schema in `@kerno/contracts`, `pnpm test:bundles` fails if the name or value reaches a client bundle, and `supabase/tests/service-role-boundary.test.ts` fails if client-reachable source references it. Any server code using it must perform an equivalent explicit authorization check (AC-3). The only such code is the audit sink in `packages/server/src/auth/supabase.ts`, which calls `record_audit_event` after verifying the session ([merchant auth](merchant-auth.md)).
 
 ## `SECURITY DEFINER` inventory
 
-`private.is_org_member`, `private.has_org_role`, `private.store_is_active` (policy helpers; avoid RLS recursion; read only the caller's own membership or public activity), and `private.protect_last_owner` (needs to see all owners). `public.create_organization` and `public.add_member` are `SECURITY INVOKER` and service-role-only (`add_member` locks the acting user's membership row with `FOR SHARE`). `public.resolve_store_by_host` and `public.resolve_store_by_slug` (THI-65, [host routing](host-routing.md)) are definer functions callable by `anon`: the only public window onto `store_domains` and `stores`, returning id, slug and primary host of active stores. `claim_domain`, `confirm_domain` and `release_domain` are `SECURITY INVOKER` and service-role-only. All definer functions set `search_path = ''`; the test suite pins this exact list.
+`private.is_org_member`, `private.has_org_role`, `private.store_is_active` (policy helpers; avoid RLS recursion; read only the caller's own membership or public activity), and `private.protect_last_owner` (needs to see all owners) and `private.audit_row_change` (audit trigger; API roles cannot insert into `audit_events`, [merchant auth](merchant-auth.md)). `public.create_organization` and `public.add_member` are `SECURITY INVOKER` and service-role-only (`add_member` locks the acting user's membership row with `FOR SHARE`). `public.resolve_store_by_host` and `public.resolve_store_by_slug` (THI-65, [host routing](host-routing.md)) are definer functions callable by `anon`: the only public window onto `store_domains` and `stores`, returning id, slug and primary host of active stores. `claim_domain`, `confirm_domain` and `release_domain` are `SECURITY INVOKER` and service-role-only. All definer functions set `search_path = ''`; the test suite pins this exact list.
 
 ## Verification
 
@@ -62,6 +62,6 @@ Limitations: the real-stack run uses direct SQL with `SET ROLE` and JWT claims, 
 
 ## Rollback
 
-The migrations are forward-only. Roll back newest first: `supabase/rollbacks/20261104090000_store_domains.down.sql` before the tenancy one.
+The migrations are forward-only. Roll back newest first: `supabase/rollbacks/20261104120000_audit_events.down.sql`, then `20261104090000_store_domains.down.sql`, then the tenancy one.
 
 The tenancy migration is forward-only. `supabase/rollbacks/20261103210000_tenancy_core.down.sql` drops everything it created and **destroys tenant data**; use it only before real tenants exist. Afterwards, roll forward with a new migration (expand, migrate, contract).
