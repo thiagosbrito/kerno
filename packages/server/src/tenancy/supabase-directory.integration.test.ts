@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createSupabaseDirectory } from "./supabase-directory";
 
 // Runs the real directory against a seeded local Supabase stack (PostgREST + grants + schema).
-// Skipped unless KERNO_TEST_SUPABASE_URL and KERNO_TEST_SUPABASE_ANON_KEY are set; not part of CI.
+// Skipped locally unless KERNO_TEST_SUPABASE_URL and KERNO_TEST_SUPABASE_ANON_KEY are set; the Browser CI job runs it against the seeded stack.
 //   pnpm db:reset && KERNO_TEST_SUPABASE_URL=http://127.0.0.1:54321 KERNO_TEST_SUPABASE_ANON_KEY=<anon> pnpm --filter @kerno/server test
 const url = process.env.KERNO_TEST_SUPABASE_URL;
 const anonKey = process.env.KERNO_TEST_SUPABASE_ANON_KEY;
