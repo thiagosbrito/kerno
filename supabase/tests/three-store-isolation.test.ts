@@ -26,6 +26,13 @@ afterAll(async () => {
   await db.close();
 });
 beforeEach(async () => {
+  // audit_events has no foreign key to organizations, so a cascade does not clear it: empty it first so only
+  // this test's own fixture changes are audited and earlier tests or runs cannot satisfy the non-empty checks.
+  await db.exec(`
+    alter table public.audit_events disable trigger audit_events_no_truncate;
+    truncate public.audit_events;
+    alter table public.audit_events enable trigger audit_events_no_truncate;
+  `);
   await db.exec(`
     truncate public.organizations, auth.users cascade;
     ${T.map((t) => `insert into auth.users (id, email) values ('${owner(t)}', 'owner-${t}@example.test'), ('${staff(t)}', 'staff-${t}@example.test');`).join("\n")}
@@ -166,8 +173,9 @@ describe("media paths (storage) are not yet exposed", () => {
   // Media upload and delivery arrive with THI-70. Until then no migration, seed or local config may
   // create a bucket, a storage policy or a public path, so there is no cross-tenant object path to
   // leak. THI-70 must replace this tripwire with per-tenant object-path policy tests for all three tenants.
-  const strip = (sql: string) => sql.replace(/--.*$/gm, "").replace(/"/g, "");
-  const STORAGE = /\bstorage\s*\.\s*(buckets|objects)\b|\bon\s+storage\b/i;
+  const strip = (sql: string) => sql.replace(/\/\*[\s\S]*?\*\//g, "").replace(/--.*$/gm, "").replace(/"/g, "");
+  // Qualified names, `on storage`, a search_path that includes storage, and unqualified object/bucket targets.
+  const STORAGE = /\bstorage\s*\.\s*(buckets|objects)\b|\bon\s+storage\b|search_path[^;]*\bstorage\b|\bon\s+(objects|buckets)\b/i;
 
   it("has no storage buckets, policies or object paths in any migration or the seed", () => {
     const sqlDir = join(migrationsDir, "..");
@@ -175,10 +183,16 @@ describe("media paths (storage) are not yet exposed", () => {
     for (const file of files) expect(strip(readFileSync(file, "utf8")), file).not.toMatch(STORAGE);
   });
 
-  it("the tripwire matches quoted and spaced spellings", () => {
-    for (const sql of ['create policy p on "storage"."objects" for select using (true);', "insert into storage . buckets (id) values ('x');"]) {
-      expect(strip(sql)).toMatch(STORAGE);
+  it("the tripwire matches quoted, spaced, search_path and unqualified spellings, and ignores comments", () => {
+    for (const sql of [
+      'create policy p on "storage"."objects" for select using (true);',
+      "insert into storage . buckets (id) values ('x');",
+      "set search_path = storage; create policy p on objects for select using (true);",
+      "create policy p on /* x */ storage.objects using (true);",
+    ]) {
+      expect(strip(sql), sql).toMatch(STORAGE);
     }
+    expect(strip("/* storage.objects */ -- on storage\nselect 1;")).not.toMatch(STORAGE);
   });
 
   it("declares no local storage bucket in supabase/config.toml", () => {
