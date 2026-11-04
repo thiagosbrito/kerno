@@ -177,9 +177,9 @@ describe("media paths (storage) are not yet exposed", () => {
   const strip = (sql: string) => sql.replace(/\/\*[\s\S]*?\*\/|--[^\n]*/g, "").replace(/"/g, "");
   // Qualified names and `on storage` apply everywhere (migrations and seed). The looser arms only make
   // sense in DDL: a search_path that includes storage (same line only, so it cannot run on into a function
-  // body) and unqualified object/bucket targets. They are kept out of the seed, whose data may say "on objects".
+  // body) and unqualified object/bucket targets (any statement form, so a multi-line search_path cannot hide them). They are kept out of the seed, whose data may say "on objects".
   const QUALIFIED = /\bstorage\s*\.\s*(buckets|objects)\b|\bon\s+storage\b/i;
-  const DDL_ONLY = /\bsearch_path\s*(=|to)[^;\n]*\bstorage\b|\bon\s+(objects|buckets)\b/i;
+  const DDL_ONLY = /\bsearch_path\s*(=|to)[^;\n]*\bstorage\b|\b(on|into|update|from|table)\s+(objects|buckets)\b|set_config\s*\(\s*'search_path'[^)]*\bstorage\b/i;
   const migrationHit = (sql: string) => QUALIFIED.test(strip(sql)) || DDL_ONLY.test(strip(sql));
   const seedHit = (sql: string) => QUALIFIED.test(strip(sql));
 
@@ -197,6 +197,10 @@ describe("media paths (storage) are not yet exposed", () => {
       "create policy p on /* x */ storage.objects using (true);",
       // A `/*` inside a line comment must not swallow the real statement that follows it.
       "-- skips /_next/*\ncreate policy p on storage.objects using (true);\n-- runs every */5 minutes\n",
+      // A multi-line search_path must not hide an unqualified statement, and neither may set_config.
+      "set search_path = public,\n  storage;\ninsert into buckets (id, public) values ('media', true);",
+      "set search_path = public,\n  storage;\nupdate buckets set public = true;",
+      "select set_config('search_path', 'storage', false);",
     ]) {
       expect(migrationHit(sql), sql).toBe(true);
     }
