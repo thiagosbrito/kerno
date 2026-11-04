@@ -58,7 +58,7 @@ The same suite (`supabase/tests`) runs in two modes:
 
 It exercises anonymous, member, non-member and service contexts across two organizations with overlapping-looking ids: cross-tenant reads, updates, deletes and inserts with forged ids; forged claims/`user_metadata`; revoked membership with a live token; role transitions; last-owner protection; suspension; catalog checks (RLS on every table, no views without `security_invoker`, definer allowlist, a pinned snapshot of the table privileges, INSERT/UPDATE column privileges and every column-level ACL entry held by `anon` and `authenticated`, deny-by-default for tables and functions created later); and a manual rollback followed by a second replay.
 
-Limitations: the real-stack run uses direct SQL with `SET ROLE` and JWT claims, not PostgREST/GoTrue over HTTP, so the HTTP layer is not exercised. Concurrent-transaction races (two owners demoting each other) are not tested; the row lock is by design only. CI runs the PGlite mode only; a Supabase-stack CI job is a follow-up. Storage policies do not exist yet (THI-70).
+Limitations: the real-stack run uses direct SQL with `SET ROLE` and JWT claims, not PostgREST/GoTrue over HTTP, so the HTTP layer is not exercised. Concurrent-transaction races (two owners demoting each other) are not tested; the row lock is by design only. CI runs the PGlite mode in the Quality job and the real-stack mode in the Browser job (added in THI-65). Storage policies do not exist yet (THI-70).
 
 ## Rollback
 

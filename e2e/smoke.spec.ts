@@ -18,6 +18,8 @@ test("storefront refuses the platform apex and unknown hosts", async ({ request 
 // Needs the local Supabase stack with supabase/seed.sql applied and real keys in the environment
 // (`pnpm db:reset`, then start the storefront with the stack's anon key). Not run in CI.
 test.describe("three seeded stores on one deployment", () => {
+  // Locally these skip without a stack; in CI a skip would hide a missing proof, so fail instead.
+  if (process.env.CI && process.env.E2E_SEEDED_STORES !== "1") throw new Error("CI must run the seeded stores (E2E_SEEDED_STORES=1)");
   test.skip(process.env.E2E_SEEDED_STORES !== "1", "set E2E_SEEDED_STORES=1 with a seeded local stack");
 
   for (const [host, name] of [

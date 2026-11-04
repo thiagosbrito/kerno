@@ -69,4 +69,4 @@ The caller of these functions (THI-68 merchant UI/API) must authorize the acting
 
 Local fixtures live in `supabase/seed.sql` (fake data, applied by `supabase db reset` only): `acme-sneakers.localhost:3001`, `acme-books.localhost:3001`, `acme-plants.localhost:3001`, a verified custom domain `shop.acme-sneakers.test`, a pending claim, plus draft and suspended stores that must never resolve. Browsers resolve `*.localhost` to loopback; for the custom domain send a `Host` header. `pnpm test:db` truncates tenant tables, so run `pnpm db:reset` afterwards to restore the seed.
 
-The seeded e2e is **not** run in CI (it needs the local Supabase stack). THI-67 owns the full three-store isolation proof.
+CI (the `Browser (Playwright)` job) starts the local Supabase stack, runs `test:db`, resets with the seed, then runs the directory integration test and the seeded e2e; with `CI` / `KERNO_REQUIRE_STACK_TESTS` set they fail rather than skip when the stack variables are missing. That job has not run yet at the time of writing: check the PR's CI result. THI-67 owns the full three-store isolation proof.

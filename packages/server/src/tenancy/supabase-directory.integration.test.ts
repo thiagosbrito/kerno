@@ -7,6 +7,9 @@ import { createSupabaseDirectory } from "./supabase-directory";
 const url = process.env.KERNO_TEST_SUPABASE_URL;
 const anonKey = process.env.KERNO_TEST_SUPABASE_ANON_KEY;
 
+// The Browser CI job sets KERNO_REQUIRE_STACK_TESTS=1 so a missing stack fails instead of skipping.
+if (process.env.KERNO_REQUIRE_STACK_TESTS && (!url || !anonKey)) throw new Error("directory integration test requires the seeded local stack");
+
 describe.skipIf(!url || !anonKey)("directory against the seeded local stack", () => {
   const dir = createSupabaseDirectory({ url: url ?? "", anonKey: anonKey ?? "" });
 
