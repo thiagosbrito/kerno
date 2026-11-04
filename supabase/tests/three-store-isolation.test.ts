@@ -173,7 +173,8 @@ describe("media paths (storage) are not yet exposed", () => {
   // Media upload and delivery arrive with THI-70. Until then no migration, seed or local config may
   // create a bucket, a storage policy or a public path, so there is no cross-tenant object path to
   // leak. THI-70 must replace this tripwire with per-tenant object-path policy tests for all three tenants.
-  const strip = (sql: string) => sql.replace(/\/\*[\s\S]*?\*\//g, "").replace(/--.*$/gm, "").replace(/"/g, "");
+  // One pass, so whichever comment style starts first wins (a `/*` inside a `--` comment must not open a block).
+  const strip = (sql: string) => sql.replace(/\/\*[\s\S]*?\*\/|--[^\n]*/g, "").replace(/"/g, "");
   // Qualified names, `on storage`, a search_path that includes storage, and unqualified object/bucket targets.
   const STORAGE = /\bstorage\s*\.\s*(buckets|objects)\b|\bon\s+storage\b|search_path[^;]*\bstorage\b|\bon\s+(objects|buckets)\b/i;
 
@@ -193,6 +194,9 @@ describe("media paths (storage) are not yet exposed", () => {
       expect(strip(sql), sql).toMatch(STORAGE);
     }
     expect(strip("/* storage.objects */ -- on storage\nselect 1;")).not.toMatch(STORAGE);
+    // A `/*` inside a line comment must not swallow the real statement that follows it.
+    const sneaky = "-- skips /_next/*\ncreate policy p on storage.objects using (true);\n-- runs every */5 minutes\n";
+    expect(strip(sneaky)).toMatch(STORAGE);
   });
 
   it("declares no local storage bucket in supabase/config.toml", () => {

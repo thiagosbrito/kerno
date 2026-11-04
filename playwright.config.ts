@@ -35,5 +35,7 @@ const servers = [
 
 export default defineConfig({
   testDir: "e2e",
+  // Production mode starts no admin app, so only the storefront-only spec may run.
+  testMatch: production ? /three-store-isolation\.spec\.ts$/ : undefined,
   webServer: production ? servers.slice(1) : servers,
 });
