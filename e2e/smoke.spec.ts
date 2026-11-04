@@ -1,8 +1,9 @@
 import { expect, test } from "@playwright/test";
 
-test("admin starts", async ({ page }) => {
+test("admin starts and sends an anonymous visitor to sign-in", async ({ page }) => {
   await page.goto("http://localhost:3100");
-  await expect(page.getByRole("heading", { name: "KERNO Admin" })).toBeVisible();
+  await expect(page).toHaveURL(/\/login\?next=%2F$/);
+  await expect(page.getByRole("heading", { name: "Sign in to KERNO Admin" })).toBeVisible();
 });
 
 // The platform apex is never a store, so this is deterministic without a database.

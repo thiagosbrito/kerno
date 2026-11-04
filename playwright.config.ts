@@ -11,7 +11,8 @@ const env = {
   NEXT_PUBLIC_SUPABASE_URL: "http://localhost:54321",
   // Seeded-store e2e (E2E_SEEDED_STORES=1) passes the local stack's own anon key here.
   NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.E2E_SUPABASE_ANON_KEY ?? "test-anon-placeholder",
-  SUPABASE_SERVICE_ROLE_KEY: "test-service-placeholder",
+  // Merchant-auth e2e (E2E_MERCHANT_AUTH=1) passes the local stack's own service key for audit writes.
+  SUPABASE_SERVICE_ROLE_KEY: process.env.E2E_SUPABASE_SERVICE_ROLE_KEY ?? "test-service-placeholder",
   PLATFORM_DOMAIN: "localhost",
 };
 

@@ -96,6 +96,12 @@ Security is a condition of every milestone. A milestone exits only when its rows
 | Trusted-proxy policy and hosting topology | M1 (policy), THI-86 (topology) | M1 uses a hosting-independent policy: ignore forwarded headers unless from an explicitly configured trusted proxy; fail closed when unconfigured. Revisit when the hosting decision lands (THI-86) |
 | API Top 10 mapping | M3 onward | Add an API Top 10 column once endpoints exist (security steering lists it as applicable) |
 
+## 5a. Delivered evidence
+
+| Ticket | Chapters / abuse cases | Evidence | Status |
+| --- | --- | --- | --- |
+| THI-66 | V4, V6, V7, V8, V9, V16 / AC-2, AC-5, AC-6, AC-11, AC-32 | [Merchant authentication and server authorization](merchant-auth.md): tests named there, CI `Browser (Playwright)` job. Not covered: session expiry by clock, MFA, reset, KERNO-side rate limits, `__Host-` cookies, CSP (listed in that document) | partial: implemented for the admin member-role path; the chapters stay `planned` overall |
+
 ## 6. Maintenance
 
 - A ticket that changes a control, adds a boundary, or closes a gap updates the relevant row in the same change and links its evidence.
