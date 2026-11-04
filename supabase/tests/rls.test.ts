@@ -9,7 +9,8 @@ import {
   migrationsDir,
   newDatabase,
   rejection,
-  rollbackFile,
+  rollbackFiles,
+  rollbacksDir,
   seed,
   service,
   user,
@@ -56,6 +57,7 @@ const EXPECTED_API_PRIVILEGES = {
     "authenticated.memberships:SELECT",
     "authenticated.organizations:DELETE",
     "authenticated.organizations:SELECT",
+    "authenticated.store_domains:SELECT",
     "authenticated.store_public_profiles:DELETE",
     "authenticated.store_public_profiles:SELECT",
     "authenticated.stores:DELETE",
@@ -88,7 +90,7 @@ describe("catalog: deny by default", () => {
       from pg_class c join pg_namespace n on n.oid = c.relnamespace
       where n.nspname = 'public' and c.relkind in ('r', 'p', 'v', 'm', 'f')`);
     expect(rows.map((r) => r.relname).sort()).toEqual(
-      ["memberships", "organizations", "store_public_profiles", "stores"],
+      ["memberships", "organizations", "store_domains", "store_public_profiles", "stores"],
     );
     for (const r of rows) {
       expect(r.rls, `${r.relname} must have RLS`).toBe(true);
@@ -126,6 +128,8 @@ describe("catalog: deny by default", () => {
       "private.is_org_member",
       "private.protect_last_owner",
       "private.store_is_active",
+      "public.resolve_store_by_host",
+      "public.resolve_store_by_slug",
     ]);
     const unpinned = await db.query(`
       select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
@@ -493,9 +497,10 @@ describe("review round 1 regressions", () => {
     }
     const open = await db.query<{ routine_name: string }>(
       `select distinct routine_name from information_schema.routine_privileges
-       where routine_schema = 'public' and grantee in ('anon', 'authenticated', 'PUBLIC')`,
+       where routine_schema = 'public' and grantee in ('anon', 'authenticated', 'PUBLIC') order by 1`,
     );
-    expect(open.rows).toEqual([]);
+    // Only the two public host resolvers are callable by API roles (see host-routing.md).
+    expect(open.rows.map((r) => r.routine_name)).toEqual(["resolve_store_by_host", "resolve_store_by_slug"]);
   });
 
   it("pins the API roles' table and column privileges", async () => {
@@ -570,7 +575,9 @@ describe("migration replay and rollback", () => {
   it("replays on an empty database and the manual rollback restores a clean slate that replays again", async () => {
     const fresh = await newDatabase();
     try {
-      await fresh.exec(readFileSync(rollbackFile, "utf8"));
+      for (const file of rollbackFiles()) {
+        await fresh.exec(readFileSync(`${rollbacksDir}/${file}`, "utf8"));
+      }
       const left = await fresh.query<{ relname: string }>(
         `select c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind = 'r'`,
       );

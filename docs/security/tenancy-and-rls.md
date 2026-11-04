@@ -47,7 +47,7 @@ Managers handle day-to-day operations (catalog, stock, orders) but not store con
 
 ## `SECURITY DEFINER` inventory
 
-`private.is_org_member`, `private.has_org_role`, `private.store_is_active` (policy helpers; avoid RLS recursion; read only the caller's own membership or public activity), and `private.protect_last_owner` (needs to see all owners). `public.create_organization` and `public.add_member` are `SECURITY INVOKER` and service-role-only (`add_member` locks the acting user's membership row with `FOR SHARE`). All definer functions set `search_path = ''`; the test suite pins this exact list.
+`private.is_org_member`, `private.has_org_role`, `private.store_is_active` (policy helpers; avoid RLS recursion; read only the caller's own membership or public activity), and `private.protect_last_owner` (needs to see all owners). `public.create_organization` and `public.add_member` are `SECURITY INVOKER` and service-role-only (`add_member` locks the acting user's membership row with `FOR SHARE`). `public.resolve_store_by_host` and `public.resolve_store_by_slug` (THI-65, [host routing](host-routing.md)) are definer functions callable by `anon`: the only public window onto `store_domains` and `stores`, returning id, slug and primary host of active stores. `claim_domain`, `confirm_domain` and `release_domain` are `SECURITY INVOKER` and service-role-only. All definer functions set `search_path = ''`; the test suite pins this exact list.
 
 ## Verification
 
@@ -58,8 +58,10 @@ The same suite (`supabase/tests`) runs in two modes:
 
 It exercises anonymous, member, non-member and service contexts across two organizations with overlapping-looking ids: cross-tenant reads, updates, deletes and inserts with forged ids; forged claims/`user_metadata`; revoked membership with a live token; role transitions; last-owner protection; suspension; catalog checks (RLS on every table, no views without `security_invoker`, definer allowlist, a pinned snapshot of the table privileges, INSERT/UPDATE column privileges and every column-level ACL entry held by `anon` and `authenticated`, deny-by-default for tables and functions created later); and a manual rollback followed by a second replay.
 
-Limitations: the real-stack run uses direct SQL with `SET ROLE` and JWT claims, not PostgREST/GoTrue over HTTP, so the HTTP layer is not exercised. Concurrent-transaction races (two owners demoting each other) are not tested; the row lock is by design only. CI runs the PGlite mode only; a Supabase-stack CI job is a follow-up. Storage policies do not exist yet (THI-70).
+Limitations: the real-stack run uses direct SQL with `SET ROLE` and JWT claims, not PostgREST/GoTrue over HTTP, so the HTTP layer is not exercised. Concurrent-transaction races (two owners demoting each other) are not tested; the row lock is by design only. CI runs the PGlite mode in the Quality job and the real-stack mode in the Browser job (added in THI-65). Storage policies do not exist yet (THI-70).
 
 ## Rollback
 
-The migration is forward-only. `supabase/rollbacks/20261103210000_tenancy_core.down.sql` drops everything it created and **destroys tenant data**; use it only before real tenants exist. Afterwards, roll forward with a new migration (expand, migrate, contract).
+The migrations are forward-only. Roll back newest first: `supabase/rollbacks/20261104090000_store_domains.down.sql` before the tenancy one.
+
+The tenancy migration is forward-only. `supabase/rollbacks/20261103210000_tenancy_core.down.sql` drops everything it created and **destroys tenant data**; use it only before real tenants exist. Afterwards, roll forward with a new migration (expand, migrate, contract).

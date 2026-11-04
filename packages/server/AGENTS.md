@@ -1,3 +1,3 @@
 # server scope
 
-Root AGENTS.md applies. Everything here is server-only (`import "server-only"` guards the entry point). Never import this package from a client component; `pnpm test:bundles` must stay clean. Service-role access needs narrow use and equivalent explicit authorization.
+Root AGENTS.md applies. Everything here is server-only (`import "server-only"` guards the entry point). Never import this package from a client component; `pnpm test:bundles` must stay clean. Service-role access needs narrow use and equivalent explicit authorization. `src/tenancy` is the single tenant-binding resolver (ADR 0004): derive the store only from `getStoreRouter().route(headers)`, never from a forwarded header, client ID, path or cookie; build shared-cache keys with `tenantCacheKey`; the request path uses the anon key. See [host routing](../../docs/security/host-routing.md).

@@ -105,6 +105,8 @@ Each abuse case lists the required negative test. IDs (`AC-n`) are referenced by
 
 ### 6.2 Host routing and domains
 
+Implementation notes for AC-8, AC-9 and AC-10 (THI-65): [host routing](host-routing.md). Statuses in the evidence map stay `planned` until the final verification (THI-84).
+
 | ID | Abuse case | Adv. | Impact | Control summary | Required failure test | Owner / Gate |
 | --- | --- | --- | --- | --- | --- | --- |
 | AC-9 | **Host header injection / spoofed X-Forwarded-Host** to reach another store or poison links | T1 | H | Hosting-independent trusted-proxy policy for M1: ignore forwarded headers unless from an explicitly configured trusted proxy; fail closed when unconfigured; revisited when the hosting decision lands (THI-86). Normalize and verify hostnames; unknown host fails closed | Spoofed Host/forwarded-host/port/case/trailing-dot variants resolve to no store or the correct one; forwarded headers ignored when no trusted proxy is configured | THI-65 / M1 |
