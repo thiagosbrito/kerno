@@ -145,7 +145,9 @@ export async function seed(db: Db): Promise<void> {
       ('${ids.storeA}', 'Main Store', 'en', 'USD'), ('${ids.storeADraft}', 'Draft Store', 'pt-BR', 'BRL'),
       ('${ids.storeB}', 'Main Store', 'en', 'USD');
     -- Fixture inserts are audited like any change; start every test with an empty trail.
+    alter table public.audit_events disable trigger audit_events_no_truncate;
     truncate public.audit_events;
+    alter table public.audit_events enable trigger audit_events_no_truncate;
   `);
 }
 

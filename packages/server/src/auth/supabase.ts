@@ -83,7 +83,7 @@ export function createMemberStore(client: SupabaseClient): MemberStore {
   }
 
   const settle = (rows: unknown[] | null, error: { code?: string } | null): MutationResult => {
-    if (error) return error.code === "P0001" ? "conflict" : error.code === "42501" ? "not_found" : "unavailable";
+    if (error) return error.code === "P0001" ? "conflict" : error.code === "42501" ? "forbidden" : "unavailable";
     return rows !== null && rows.length > 0 ? "ok" : "not_found";
   };
 

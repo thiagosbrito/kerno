@@ -35,11 +35,12 @@ Every response is `Cache-Control: no-store`, carries `X-Correlation-Id`, and con
 
 ## Audit
 
-`public.audit_events` (append-only for every role, including `service_role`; no foreign keys, so evidence outlives the organization, store or user). Fields: organization, optional store, actor, action, target type and id, outcome (`success`, `denied`, `failure`), correlation id, small metadata object. Metadata holds ids, roles and changed column *names*, never values (contact emails, notes).
+`public.audit_events` (no role can update, delete, truncate or insert directly, `service_role` included: a row trigger blocks UPDATE/DELETE, a statement trigger blocks TRUNCATE even for the table owner, and `service_role` privileges are revoked, leaving `record_audit_event` as the only service-side writer; the owner/superuser can still bypass via DDL, which is outside the application threat model; no foreign keys, so evidence outlives the organization, store or user). Fields: organization, optional store, actor, action, target type and id, outcome (`success`, `denied`, `failure`), correlation id, small metadata object. Metadata holds ids, roles and changed column *names*, never values (contact emails, notes).
 
 - **Successes** are written by `SECURITY DEFINER` triggers on `memberships`, `stores` and `organizations`, so they cover every path (admin app, direct Data API, service role, SQL). The actor is `auth.uid()`; `null` means a trusted or system context. For `add_member`, the actor is the acting user it was given.
 - **Denials** (insufficient role, escalation attempts) are written by the server through `record_audit_event`. Probes by non-members are only logged, because writing them into a guessed organization's trail would let anyone spam it.
-- The correlation id the server generates is forwarded to Postgres as an `x-correlation-id` header, so trigger rows and denial rows for one request share it. A malformed value is replaced.
+- Successes are audited on every path, but denials only on server routes: a denied direct Data API call is filtered by RLS to zero rows and leaves no row. Writes made with the service role carry a null actor unless the function takes one (as `add_member` does), so future service-role flows must pass the actor explicitly.
+- The correlation id the server generates is forwarded to Postgres as an `x-correlation-id` header, so trigger rows and denial rows for one request share it. A malformed value is replaced. A signed-in user calling the Data API directly can still choose a well-formed id for their own trigger rows, so treat the correlation id as untrusted for direct API activity.
 - Owners and admins of an organization can read its trail through RLS; nobody else can. There is no admin UI for it yet.
 - **Not audited yet:** logins and logouts (user-level, not tenant-scoped; they are structured log lines), and events from tables that later tickets add (domains, publishing, payments). Each such ticket must add its own audit coverage (AC-32).
 
@@ -66,4 +67,4 @@ CI runs the e2e in the `Browser (Playwright)` job. Unit tests use in-memory fake
 
 ## Rollback
 
-`supabase/rollbacks/20261104120000_audit_events.down.sql` drops the triggers, the function, the table (**destroying the audit trail**) and the type; run it first, before the other rollbacks. Pre-production only. Afterwards, roll forward with a new migration. Application code that calls `record_audit_event` then fails to audit denials but still denies (audit failures never turn a denial into an allow).
+Run `supabase/rollbacks/20261104130000_audit_events_harden.down.sql` first, then `supabase/rollbacks/20261104120000_audit_events.down.sql`, which drops the triggers, the function, the table (**destroying the audit trail**) and the type; run it first, before the other rollbacks. Pre-production only. Afterwards, roll forward with a new migration. Application code that calls `record_audit_event` then fails to audit denials but still denies (audit failures never turn a denial into an allow).

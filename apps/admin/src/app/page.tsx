@@ -14,8 +14,9 @@ export default async function Home() {
   if (session.status === "unauthenticated") redirect("/login");
   if (session.status === "unavailable") throw new Error("Session check unavailable");
 
-  // Through the user's own credentials: RLS returns only organizations they currently belong to.
-  const { data, error } = await auth.client.from("memberships").select("role, organizations(name)");
+  // Through the user's own credentials. RLS lets a member see every membership of their organizations,
+  // so filter to the caller's own rows or other members' roles would be listed as theirs.
+  const { data, error } = await auth.client.from("memberships").select("role, organizations(name)").eq("user_id", session.userId);
   if (error) throw new Error("Membership lookup unavailable");
   const rows = (data ?? []).flatMap((row) => {
     const role = orgRoleSchema.safeParse((row as { role?: unknown }).role);

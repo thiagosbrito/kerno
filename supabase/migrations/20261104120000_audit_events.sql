@@ -28,7 +28,8 @@ create policy audit_events_select on public.audit_events for select to authentic
 revoke all on public.audit_events from public, anon, authenticated;
 grant select on public.audit_events to authenticated;
 
--- Append-only for every role, service_role included (TRUNCATE needs superuser-level access).
+-- Row-level guard against UPDATE/DELETE. TRUNCATE and service_role privileges are handled by
+-- 20261104130000_audit_events_harden.sql (a row trigger does not fire for TRUNCATE).
 create function private.audit_events_immutable() returns trigger
 language plpgsql set search_path = ''
 as $$

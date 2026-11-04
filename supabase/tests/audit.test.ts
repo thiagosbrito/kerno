@@ -147,8 +147,20 @@ describe("audit visibility and tamper resistance", () => {
   });
 
   it("even the service role cannot rewrite or delete history", async () => {
-    expect((await rejection(as(db, service, "update public.audit_events set outcome = 'denied'"))).message).toContain("append-only");
-    expect((await rejection(as(db, service, "delete from public.audit_events"))).message).toContain("append-only");
+    expect((await rejection(as(db, service, "update public.audit_events set outcome = 'denied'"))).code).toBe(PERMISSION);
+    expect((await rejection(as(db, service, "delete from public.audit_events"))).code).toBe(PERMISSION);
+    // The table owner is stopped by the row trigger even though it holds the privileges.
+    expect((await rejection(db.exec("update public.audit_events set outcome = 'denied'"))).message).toContain("append-only");
+    expect((await rejection(db.exec("delete from public.audit_events"))).message).toContain("append-only");
+  });
+
+  it("even the service role cannot truncate, forge rows directly or delete (only record_audit_event writes)", async () => {
+    expect((await rejection(as(db, service, "truncate public.audit_events"))).code).toBe(PERMISSION);
+    const forged = `insert into public.audit_events (organization_id, action, target_type, outcome, correlation_id) values ('${ids.orgA}', 'fake.event', 'store', 'success', 'abcdefgh12')`;
+    expect((await rejection(as(db, service, forged))).code).toBe(PERMISSION);
+    // Even the table owner's TRUNCATE is stopped by the statement trigger.
+    expect((await rejection(db.exec("truncate public.audit_events"))).message).toContain("append-only");
+    expect((await events()).rows.length).toBeGreaterThan(0);
   });
 
   it("survives deletion of the organization it describes", async () => {

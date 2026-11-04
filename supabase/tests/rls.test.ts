@@ -130,6 +130,7 @@ describe("catalog: deny by default", () => {
       "private.is_org_member",
       "private.protect_last_owner",
       "private.store_is_active",
+      "public.record_audit_event",
       "public.resolve_store_by_host",
       "public.resolve_store_by_slug",
     ]);

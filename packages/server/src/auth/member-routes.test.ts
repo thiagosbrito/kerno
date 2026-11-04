@@ -216,6 +216,13 @@ describe("role escalation", () => {
     expect(members.writes).toHaveLength(2);
   });
 
+  it("returns 403 and audits when the database refuses a write the server check allowed (concurrent demotion)", async () => {
+    members.nextWrite = "forbidden";
+    expect((await change("staff", MANAGER)).status).toBe(403);
+    expect(audits).toHaveLength(1);
+    expect(audits[0]).toMatchObject({ action: "member.role_change.denied", details: { reason: "rejected_by_database" } });
+  });
+
   it("surfaces the last-owner protection as a conflict", async () => {
     members.nextWrite = "conflict";
     expect((await change("staff", OWNER)).status).toBe(409);

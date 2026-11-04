@@ -28,6 +28,9 @@ function fromMutation(deps: AuthDependencies, event: string, result: MutationRes
   switch (result) {
     case "ok":
       return respond(deps, 200, { ok: true });
+    case "forbidden":
+      // The database refused what the server check allowed (for example the actor was demoted mid-request).
+      return respond(deps, 403, { error: "forbidden" });
     case "conflict":
       return respond(deps, 409, { error: "conflict" });
     case "not_found":
@@ -36,6 +39,24 @@ function fromMutation(deps: AuthDependencies, event: string, result: MutationRes
     default:
       return respond(deps, 503, { error: "unavailable" });
   }
+}
+
+function auditDatabaseRefusal(
+  deps: AuthDependencies,
+  event: string,
+  params: MemberRouteParams,
+  targetId: string,
+  gate: { userId: string; role: OrgRole },
+): Promise<void> {
+  return recordDenied(deps, {
+    organizationId: params.organizationId,
+    userId: gate.userId,
+    action: event,
+    targetType: "membership",
+    targetId,
+    reason: "rejected_by_database",
+    role: gate.role,
+  });
 }
 
 async function readJson(request: Request): Promise<unknown> {
@@ -96,7 +117,9 @@ export async function handleMemberRoleChange(
 
   // The write uses the caller's own credentials: RLS and the last-owner trigger apply again.
   // The trigger on `memberships` writes the success audit row (actor = auth.uid()).
-  return fromMutation(deps, event, await deps.members.changeRole(params.organizationId, target.data, body.data.role));
+  const result = await deps.members.changeRole(params.organizationId, target.data, body.data.role);
+  if (result === "forbidden") await auditDatabaseRefusal(deps, event, params, target.data, gate);
+  return fromMutation(deps, event, result);
 }
 
 /** DELETE /api/organizations/:organizationId/members/:userId  (also how a member leaves) */
@@ -129,5 +152,7 @@ export async function handleMemberRemoval(
     });
     return refuse(deps, event, { status: 403, code: "forbidden", reason: "removal_not_permitted" });
   }
-  return fromMutation(deps, event, await deps.members.remove(params.organizationId, target.data));
+  const result = await deps.members.remove(params.organizationId, target.data);
+  if (result === "forbidden") await auditDatabaseRefusal(deps, event, params, target.data, gate);
+  return fromMutation(deps, event, result);
 }

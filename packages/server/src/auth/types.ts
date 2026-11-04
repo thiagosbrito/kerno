@@ -11,7 +11,7 @@ export type RoleLookup =
   | { readonly status: "not_member" }
   | { readonly status: "unavailable" };
 
-export type MutationResult = "ok" | "not_found" | "conflict" | "unavailable";
+export type MutationResult = "ok" | "not_found" | "forbidden" | "conflict" | "unavailable";
 
 /**
  * Membership access through the CALLER's own credentials, so RLS applies on top of every check
