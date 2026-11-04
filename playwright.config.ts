@@ -26,10 +26,14 @@ const serve = (app: string, port: number) =>
     ? `pnpm --filter @kerno/${app} exec next build && pnpm --filter @kerno/${app} exec next start --port ${port}`
     : `pnpm --filter @kerno/${app} exec next dev --port ${port}`;
 
+// The production run exists for the storefront's cache behaviour, so it skips the admin app (a second
+// production build the storefront-only specs never use). Run only e2e/three-store-isolation.spec.ts with it.
+const servers = [
+  { command: serve("admin", 3100), url: ADMIN, env, reuseExistingServer: false, timeout: 120_000 },
+  { command: serve("storefront", 3101), port: 3101, env, reuseExistingServer: false, timeout: production ? 300_000 : 120_000 },
+];
+
 export default defineConfig({
   testDir: "e2e",
-  webServer: [
-    { command: serve("admin", 3100), url: ADMIN, env, reuseExistingServer: false, timeout: production ? 300_000 : 120_000 },
-    { command: serve("storefront", 3101), port: 3101, env, reuseExistingServer: false, timeout: production ? 300_000 : 120_000 },
-  ],
+  webServer: production ? servers.slice(1) : servers,
 });
