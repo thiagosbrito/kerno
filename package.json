@@ -28,7 +28,7 @@
     "test:db": "env KERNO_TEST_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres pnpm --filter @kerno/supabase test"
   },
   "devDependencies": {
-    "@playwright/test": "1.64.1",
+    "@playwright/test": "1.65.0",
     "eslint": "10.14.0",
     "supabase": "2.122.1",
     "turbo": "2.11.10",
